@@ -1,0 +1,16 @@
+# 本地配置（含敏感 webhook URL）— 不进 git
+skills/*/config.yaml
+
+# 系统 / IDE
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python / Node 缓存（防未来扩展时误提交）
+__pycache__/
+*.pyc
+node_modules/
+.env
+.env.local

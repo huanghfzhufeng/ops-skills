@@ -1,0 +1,177 @@
+# 26 个数字角色定位
+# 字段说明：
+#   handle   TikTok 账号
+#   track    赛道（fashion_beauty / health_fitness / tech_ai / entertainment）
+#   persona  一句话人设定位（年龄 + 城市 + 身份 + 性格关键词）
+#   template 常用模板（用于配对创意时的体裁参考）
+
+tracks:
+  fashion_beauty:
+    label: "穿搭/彩妆/护肤"
+    members: [sophie, ava, ezra, riley, silver, nari]
+  health_fitness:
+    label: "健康/健身/成分党"
+    members: [clara, leila, ryan, max, avery, joey]
+  tech_ai:
+    label: "数码/AI 工具"
+    members: [mia, charlotte, priya, ro, spencer]
+  entertainment:
+    label: "泛娱乐/情绪共鸣（万能型）"
+    members: [eleanor, iris, leo, caden, mason, kai, jesse, emma, jade]
+
+personas:
+  caden:
+    handle: "@caden.actually"
+    track: entertainment
+    persona: "搞笑 e 人，芝加哥碎嘴高二大男孩"
+    template: "小品"
+
+  mason:
+    handle: "@its.mason_7"
+    track: entertainment
+    persona: "海风男孩，麻省海边害羞高三男生"
+    template: "海岸生活"
+
+  jade:
+    handle: "@its.jade_9"
+    track: entertainment
+    persona: "冷静清醒，费城 27 岁心理咨询师"
+    template: "ootd / 心理科普"
+
+  emma:
+    handle: "@emma.era_"
+    track: entertainment
+    persona: "甜美邻家，波士顿 23 岁出版社助理编辑"
+    template: "ootd / 书单"
+
+  nari:
+    handle: "@nari.actually"
+    track: fashion_beauty
+    persona: "甜辣 ABG，22 岁三番科技销售"
+    template: "ABG 转场"
+
+  silver:
+    handle: "@silver.szn_"
+    track: fashion_beauty
+    persona: "时髦拽妹，NYC 22 岁 PR Associate"
+    template: "ootd / NYC it girl"
+
+  joey:
+    handle: "@joey.actually"
+    track: health_fitness
+    persona: "金毛系运动大男孩，休斯顿 18 岁橄榄球队长"
+    template: "小品 / 运动饮食"
+
+  kai:
+    handle: "@kai.szn_1"
+    track: entertainment
+    persona: "混血漫画少年，NYU 19 岁视觉设计大一"
+    template: "大学生活 / 艺术过程"
+
+  jesse:
+    handle: "@its.jesse_1"
+    track: entertainment
+    persona: "24 岁洛杉矶电影 studio associate"
+    template: "电影感 / 街拍"
+
+  avery:
+    handle: "@averyyyinla"
+    track: health_fitness
+    persona: "万人迷，LA 24 岁全职网红"
+    template: "clean girl / ootd"
+
+  spencer:
+    handle: "@spencer.nyc"
+    track: tech_ai
+    persona: "WASP 纽约科技帅哥，24 岁 PM"
+    template: "科技 + ootd"
+
+  sophie:
+    handle: "@sophie.fits2"
+    track: fashion_beauty
+    persona: "西村画廊女孩，纽约 24 岁策展助理"
+    template: "ootd / 高质感测评"
+
+  ava:
+    handle: "@ava.glow3"
+    track: fashion_beauty
+    persona: "中东系公关大美女，LA 25 岁时尚公关"
+    template: "ootd / PR unboxing"
+
+  ezra:
+    handle: "@ezra.style2"
+    track: fashion_beauty
+    persona: "稳定发疯型时尚营销人，伦敦 25 岁"
+    template: "幽默 / 男性时尚"
+
+  riley:
+    handle: "@finn.fits2"
+    track: fashion_beauty
+    persona: "布鲁克林古着酷女孩，23 岁设计师"
+    template: "ootd + 幽默 / 古着"
+
+  clara:
+    handle: "@clara.wellness2"
+    track: health_fitness
+    persona: "干净系亚裔护士姐姐，巴尔的摩 24 岁"
+    template: "健康生活 vlog / 成分党"
+
+  leila:
+    handle: "@evelyn.pilates"
+    track: health_fitness
+    persona: "波斯系美丽生活主妇，休斯顿 24 岁"
+    template: "健康生活 vlog / 普拉提"
+
+  ryan:
+    handle: "@ryan.eats8"
+    track: health_fitness
+    persona: "湾区健身工程师 bro，SF 25 岁 SWE"
+    template: "健身 + 科技 / meal prep"
+
+  max:
+    handle: "@max.walks0"
+    track: health_fitness
+    persona: "湾区幽默黑人工程师，SF 24 岁 SWE"
+    template: "健身 + 幽默 / 生活 hack"
+
+  mia:
+    handle: "@mia.apps"
+    track: tech_ai
+    persona: "Tribeca 黑人投资女王，NYC 24 岁 PE"
+    template: "科技 / ootd"
+
+  charlotte:
+    handle: "@charlotte.ai"
+    track: tech_ai
+    persona: "时髦 ABG 产品经理，SF 22 岁"
+    template: "ootd + 科技 / AI 工具"
+
+  priya:
+    handle: "@jake.setup"
+    track: tech_ai
+    persona: "印度系 hot take queen，SF 23 岁数据科学家"
+    template: "ootd + 科技 / hot take"
+
+  ro:
+    handle: "@eli.hacks"
+    track: tech_ai
+    persona: "硅谷幽默印度 PM，SF 24 岁"
+    template: "幽默 + 科技 / 生活 hack"
+
+  eleanor:
+    handle: "@eleanor.core0"
+    track: entertainment
+    persona: "南方美人甜心姐妹会大四，ASU 22 岁"
+    template: "ootd / 校园"
+
+  iris:
+    handle: "@iris.moods"
+    track: entertainment
+    persona: "职场尤物清醒姐，芝加哥 23 岁四大审计"
+    template: "幽默 + ootd / 职场"
+
+  leo:
+    handle: "@leo.thoughts0"
+    track: entertainment
+    persona: "西雅图亚裔科技圈天菜，22 岁 SWE"
+    template: "情感 / 健身 + 科技"

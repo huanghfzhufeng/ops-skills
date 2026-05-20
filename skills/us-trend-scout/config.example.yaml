@@ -1,0 +1,7 @@
+# US Trend Scout 配置 — 复制此文件为 config.yaml 并填入真实 webhook URL
+# config.yaml 已被 .gitignore 排除，不会进入 git 仓库
+
+# 飞书机器人 webhook URL
+# 获取方式：飞书群 → 群设置 → 群机器人 → 添加机器人 → 自定义机器人 → 复制 webhook URL
+# 格式：https://open.feishu.cn/open-apis/bot/v2/hook/xxxxxxxxxxxx
+feishu_webhook_url: "REPLACE_WITH_YOUR_FEISHU_WEBHOOK_URL"
