@@ -9,22 +9,52 @@ description: 美区 TikTok 热点抓取 + 飞书推送。每天用 6 路并行 w
 
 ## 首次使用
 
-在 `config.yaml`（同目录下）填写 `feishu_webhook_url`。格式：
+配置文件放在 user-level 目录 `~/.config/ops-skills/`（跨 plugin 升级保留，不会丢）：
+
+```bash
+mkdir -p ~/.config/ops-skills
+
+# 拷一份 config 模板过去
+cp <skill-dir>/config.example.yaml ~/.config/ops-skills/us-trend-scout.yaml
+
+# 编辑填入飞书 webhook URL
+$EDITOR ~/.config/ops-skills/us-trend-scout.yaml
 ```
-https://open.feishu.cn/open-apis/bot/v2/hook/xxxxxxxxxxxx
-```
+
+webhook 格式：`https://open.feishu.cn/open-apis/bot/v2/hook/xxxxxxxxxxxx`
 
 webhook 没填时仍可跑（产出简报 dump 到对话，方便调试），但不会推飞书。
 
+**想自定义 26 个数字角色** → 同样的方式覆盖 `personas.yaml`：
+
+```bash
+cp <skill-dir>/personas.yaml ~/.config/ops-skills/personas.yaml
+$EDITOR ~/.config/ops-skills/personas.yaml
+```
+
 ## 工作流（按顺序执行）
 
-### Step 1 - 读配置
+### Step 1 - 读配置（**user-level 优先 + plugin 自带 fallback**）
 
-读取同目录下：
-- `personas.yaml`（26 数字角色 + 4 赛道映射）
-- `config.yaml`（飞书 webhook URL）
+按以下顺序加载两份 yaml：
 
-如果 yaml 文件缺失，报错并引导用户补齐。
+**personas.yaml**（26 数字角色 + 4 赛道映射）：
+1. 优先读 `~/.config/ops-skills/personas.yaml`（用户自定义）
+2. 找不到则 fallback 到本 skill 目录下的 `personas.yaml`（plugin 自带默认）
+
+**us-trend-scout.yaml**（飞书 webhook URL）：
+1. 优先读 `~/.config/ops-skills/us-trend-scout.yaml`（用户配置，**跨升级保留**）
+2. 找不到则提示用户先按"首次使用"段落创建，但仍可继续（webhook 跳过推送）
+
+实现提示（用 Bash 检查文件）：
+```bash
+USER_CONFIG="$HOME/.config/ops-skills/us-trend-scout.yaml"
+USER_PERSONAS="$HOME/.config/ops-skills/personas.yaml"
+[ -f "$USER_CONFIG" ] && CONFIG="$USER_CONFIG" || CONFIG="<skill-dir>/config.example.yaml"
+[ -f "$USER_PERSONAS" ] && PERSONAS="$USER_PERSONAS" || PERSONAS="<skill-dir>/personas.yaml"
+```
+
+**注意**：plugin 目录里的 `config.yaml` 已废弃（升级会丢）。一律走 `~/.config/ops-skills/` 路径。
 
 ### Step 2 - 算日期
 
@@ -74,7 +104,7 @@ webhook 没填时仍可跑（产出简报 dump 到对话，方便调试），但
 
 ### Step 8 - 推飞书
 
-读 `config.yaml::feishu_webhook_url`，用 Bash:
+从 Step 1 已加载的 `$CONFIG`（即 `~/.config/ops-skills/us-trend-scout.yaml`）里读 `feishu_webhook_url`，用 Bash:
 
 ```bash
 curl -sS -X POST "$WEBHOOK_URL" \

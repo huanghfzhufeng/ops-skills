@@ -1,7 +1,7 @@
 {
   "name": "ops-skills",
   "description": "运营自动化 Claude Code skill 集合：美区 TikTok 热点抓取 + 飞书推送 + xcmo 批次产物下载打包。",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": {
     "name": "huanghfzhufeng",
     "url": "https://github.com/huanghfzhufeng"
@@ -11,9 +11,17 @@
   "license": "Apache-2.0",
   "keywords": [
     "tiktok",
+    "tiktok-trends",
+    "douyin",
     "feishu",
+    "lark",
     "xcmo",
     "content-ops",
-    "trending"
+    "content-creator",
+    "mcn",
+    "automation",
+    "trending",
+    "social-media",
+    "video-ops"
   ]
 }

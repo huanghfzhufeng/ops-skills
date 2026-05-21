@@ -11,6 +11,13 @@ skills/*/config.yaml
 # Python / Node 缓存（防未来扩展时误提交）
 __pycache__/
 *.pyc
+.pytest_cache/
+.coverage
+htmlcov/
 node_modules/
 .env
 .env.local
+
+# user-level config（开发时可能误放到仓库根）
+config.yaml
+us-trend-scout.yaml

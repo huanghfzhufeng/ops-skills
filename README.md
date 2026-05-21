@@ -1,13 +1,44 @@
 # ops-skills
 
+[![CI](https://github.com/huanghfzhufeng/ops-skills/actions/workflows/ci.yml/badge.svg)](https://github.com/huanghfzhufeng/ops-skills/actions/workflows/ci.yml)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Plugin Version](https://img.shields.io/badge/plugin-v1.1.0-green)](CHANGELOG.md)
+
 运营自动化 Claude Code skill 集合，围绕「美区 TikTok 矩阵号」一条业务线：
 
 - **us-trend-scout** — 每天自动抓美区 TikTok 热点，配 26 个数字角色出具体创意，推飞书群
 - **xcmo-download** — 从 [xcmo.ai](https://xcmo.ai) 批量下载 batch 产物（视频 + 文案 + 标签），按「外部 / 内部」分组打包
 
-## 安装
+## Quick Start（5 分钟上手）
 
 需要 [Claude Code](https://docs.claude.com/en/docs/agents/claude-code/overview)。
+
+```bash
+# 1) 装 plugin（在 Claude Code REPL 里跑）
+/plugin marketplace add huanghfzhufeng/ops-skills
+/plugin install ops-skills@ops-skills
+
+# 2) 装 Python 依赖
+pip install python-docx
+
+# 3) 配置 us-trend-scout 的飞书 webhook（一次性，跨升级保留）
+mkdir -p ~/.config/ops-skills
+curl -sL https://raw.githubusercontent.com/huanghfzhufeng/ops-skills/main/skills/us-trend-scout/config.example.yaml \
+  > ~/.config/ops-skills/us-trend-scout.yaml
+$EDITOR ~/.config/ops-skills/us-trend-scout.yaml   # 填飞书 webhook URL
+
+# 4) 跑一次试试热点
+# 在 Claude Code 里跟 Claude 说：
+跑一次热点
+# → 6 路并行抓热点 → 配 26 角色 → 推飞书（看群里）
+
+# 5) （可选）配 xcmo session token，准备下载 batch
+# 浏览器登录 xcmo.ai → F12 → Application → Cookies → 复制 vee_session 值
+# 在 Claude Code 里说：
+更新 xcmo token: <你的 token>
+```
+
+## 安装
 
 ```
 /plugin marketplace add huanghfzhufeng/ops-skills
@@ -18,7 +49,7 @@
 
 装完两个 skill 会以 `ops-skills:us-trend-scout` / `ops-skills:xcmo-download` 命名空间出现，触发关键词都已写在各自 `SKILL.md` 的 `description` 里。
 
-### 依赖
+### Python 依赖
 
 xcmo-download 用到 `python-docx`：
 
@@ -30,6 +61,24 @@ pip install python-docx
 
 us-trend-scout 全用 WebSearch + 标准库，无额外依赖。
 
+### 升级
+
+```
+/plugin upgrade ops-skills
+```
+
+社区 plugin 默认**不自动升级**——必须用户主动跑。详见 [CHANGELOG.md](CHANGELOG.md) 看每版改了啥。
+
+## 用户配置（跨升级保留）
+
+所有用户级配置统一放在 `~/.config/ops-skills/`，**plugin 升级时这个目录不动**，配置不会丢：
+
+| 文件 | 作用 | 必填 |
+|---|---|---|
+| `~/.config/ops-skills/us-trend-scout.yaml` | 飞书 webhook URL | 否（不填则简报 dump 到对话不推送）|
+| `~/.config/ops-skills/personas.yaml` | 自定义数字角色，覆盖默认 26 个 | 否（不填用 plugin 自带）|
+| `~/.claude/memory/xcmo-session.json` | xcmo 平台 session token | xcmo-download 必填 |
+
 ## Skills
 
 ### us-trend-scout
@@ -38,17 +87,9 @@ us-trend-scout 全用 WebSearch + 标准库，无额外依赖。
 
 **触发词**：热点日报 / 美区热点 / us trend / trend scout / 跑一次热点
 
-**首次使用**：
+<!-- TODO: 跑一次后截一张飞书群里收到的简报截图，存到 docs/screenshots/feishu-briefing.png -->
 
-```bash
-cd <plugin-install-path>/skills/us-trend-scout
-cp config.example.yaml config.yaml
-# 编辑 config.yaml 填入飞书 webhook URL
-```
-
-webhook 获取方式：飞书群 → 群设置 → 群机器人 → 添加机器人 → 自定义机器人 → 复制 webhook URL。
-
-webhook 没填时仍可跑（简报直接 dump 到对话），不会推飞书。
+![飞书简报示例](docs/screenshots/feishu-briefing.png)
 
 **定时**：
 
@@ -75,6 +116,12 @@ UTC 01:00 = 北京 09:00。
 内部: batch-xxx, batch-yyy
 ```
 
+<!-- TODO: 跑一次后截一张 .docx 内容的截图，存到 docs/screenshots/xcmo-docx.png -->
+
+![xcmo-download 产出示例](docs/screenshots/xcmo-docx.png)
+
+**输出位置**：`~/Desktop/xcmo-batches/<YYYYMMDD>/`
+
 **首次配置**（拿 xcmo session token）：
 
 1. 浏览器打开 https://xcmo.ai 登录
@@ -83,34 +130,50 @@ UTC 01:00 = 北京 09:00。
 
 Claude 会把 token 写入 `~/.claude/memory/xcmo-session.json`（user 级，不进 plugin 缓存，升级 plugin 不会丢）。token 过期后再说一次「更新 xcmo token: ...」即可。
 
-**输出位置**：`~/Desktop/xcmo-batches/<YYYYMMDD>/`
-
 ## 仓库结构
 
 ```
 ops-skills/
 ├── .claude-plugin/
-│   └── plugin.json
+│   ├── plugin.json           # plugin 自身元数据
+│   └── marketplace.json      # marketplace 目录索引
+├── .github/workflows/ci.yml  # GitHub Actions: 校验 + pytest
 ├── skills/
 │   ├── us-trend-scout/
 │   │   ├── SKILL.md
-│   │   ├── personas.yaml          # 26 数字角色定位（公开）
-│   │   └── config.example.yaml    # 配置模板（webhook 占位符）
+│   │   ├── personas.yaml          # 默认 26 数字角色（user 可覆盖）
+│   │   └── config.example.yaml    # webhook 配置模板
 │   └── xcmo-download/
 │       ├── SKILL.md
 │       └── download.py            # urllib + python-docx
-├── requirements.txt
-└── README.md
+├── tests/test_download.py    # pytest 单测（27 case）
+├── bump-version.sh           # 同步 plugin.json + marketplace.json 版本
+├── CHANGELOG.md
+├── LICENSE                   # Apache 2.0
+├── README.md
+├── requirements.txt          # python-docx
+├── requirements-dev.txt      # + pytest
+└── pytest.ini
 ```
 
 ## 开发
 
-本地调试 plugin（无需先发布到 marketplace）：
-
 ```bash
+# clone + 本地跑测试
 git clone https://github.com/huanghfzhufeng/ops-skills.git
 cd ops-skills
+pip install -r requirements-dev.txt
+pytest
+
+# 本地调试 plugin（无需先发布）
 claude --plugin-dir .
+
+# 发版（必须同步两份 JSON 的 version！）
+./bump-version.sh 1.1.1
+# 编辑 CHANGELOG.md 加新版段
+git add -A && git commit -m "chore: release 1.1.1"
+git tag v1.1.1
+git push && git push --tags
 ```
 
 ## 反馈

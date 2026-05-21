@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    name: Validate plugin structure
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate plugin.json
+        run: |
+          python3 -c "
+          import json
+          data = json.load(open('.claude-plugin/plugin.json'))
+          required = ['name', 'version', 'description']
+          missing = [f for f in required if f not in data]
+          if missing:
+              raise SystemExit(f'plugin.json 缺字段: {missing}')
+          print(f'✓ plugin.json valid: {data[\"name\"]} v{data[\"version\"]}')
+          "
+
+      - name: Validate marketplace.json
+        run: |
+          python3 -c "
+          import json
+          data = json.load(open('.claude-plugin/marketplace.json'))
+          required = ['name', 'owner', 'plugins']
+          missing = [f for f in required if f not in data]
+          if missing:
+              raise SystemExit(f'marketplace.json 缺字段: {missing}')
+          if not data['plugins']:
+              raise SystemExit('marketplace.json plugins[] 为空')
+          for p in data['plugins']:
+              for pf in ['name', 'source']:
+                  if pf not in p:
+                      raise SystemExit(f'plugin[{p.get(\"name\", \"?\")}] 缺字段: {pf}')
+          print(f'✓ marketplace.json valid: {data[\"name\"]} 含 {len(data[\"plugins\"])} 个 plugin')
+          "
+
+      - name: Validate version consistency (plugin.json ↔ marketplace.json)
+        run: |
+          python3 -c "
+          import json
+          pj = json.load(open('.claude-plugin/plugin.json'))
+          mj = json.load(open('.claude-plugin/marketplace.json'))
+          plugin_version = pj['version']
+          mp_versions = {p['name']: p.get('version') for p in mj['plugins']}
+          if pj['name'] in mp_versions and mp_versions[pj['name']] != plugin_version:
+              raise SystemExit(
+                  f'✗ version 不一致: plugin.json={plugin_version} '
+                  f'marketplace.json[{pj[\"name\"]}]={mp_versions[pj[\"name\"]]}. '
+                  f'记得跑 ./bump-version.sh 同步两份'
+              )
+          print(f'✓ version 同步: {plugin_version}')
+          "
+
+      - name: Validate SKILL.md frontmatter
+        run: |
+          python3 << 'EOF'
+          import re
+          from pathlib import Path
+
+          errors = []
+          for skill_md in sorted(Path('skills').rglob('SKILL.md')):
+              content = skill_md.read_text()
+              m = re.match(r'^---\n(.*?)\n---', content, re.DOTALL)
+              if not m:
+                  errors.append(f'{skill_md}: 缺 YAML frontmatter')
+                  continue
+              fm = m.group(1)
+              desc_m = re.search(r'^description:\s*(.+?)(?=\n\w+:|\Z)', fm, re.M | re.DOTALL)
+              if not desc_m:
+                  errors.append(f'{skill_md}: 缺 description')
+                  continue
+              desc_len = len(desc_m.group(1).strip())
+              if desc_len > 1536:
+                  errors.append(f'{skill_md}: description {desc_len} 字符 > 1536 上限')
+              else:
+                  print(f'✓ {skill_md}: description {desc_len} 字符')
+
+          if errors:
+              for e in errors:
+                  print(f'✗ {e}')
+              raise SystemExit(1)
+          EOF
+
+  test:
+    name: pytest
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Verify download.py syntax
+        run: python3 -m py_compile skills/xcmo-download/download.py
+
+      - name: Run pytest
+        run: pytest -v -m unit
