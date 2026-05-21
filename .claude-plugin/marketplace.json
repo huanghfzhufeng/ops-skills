@@ -1,19 +1,19 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "ops-skills",
-  "description": "运营自动化 Claude Code skill 集合：美区 TikTok 热点抓取 + 飞书推送 + xcmo 批次产物下载打包。",
+  "name": "huanghfzhufeng",
+  "description": "huanghfzhufeng 的 Claude Code plugin marketplace。围绕中文内容创作 / 美区 TikTok 矩阵 / 运营自动化等领域，每个 plugin 独立装配。",
   "owner": {
     "name": "huanghfzhufeng",
     "url": "https://github.com/huanghfzhufeng"
   },
   "plugins": [
     {
-      "name": "ops-skills",
-      "source": "./",
-      "description": "运营自动化 Claude Code skill 集合：美区 TikTok 热点抓取 + 飞书推送 + xcmo 批次产物下载打包。",
-      "version": "1.1.0",
+      "name": "tiktok-matrix",
+      "source": "./plugins/tiktok-matrix",
+      "description": "美区 TikTok 矩阵号运营工具集：每天自动抓美区热点配 26 数字角色推飞书，从 xcmo 平台批量下载 batch 产物按外部/内部分组打包。",
+      "version": "1.0.0",
       "category": "content-creation",
-      "homepage": "https://github.com/huanghfzhufeng/ops-skills"
+      "homepage": "https://github.com/huanghfzhufeng/ops-skills/tree/main/plugins/tiktok-matrix"
     }
   ]
 }
