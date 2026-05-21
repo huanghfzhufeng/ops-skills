@@ -56,8 +56,10 @@ batch ID 格式：`batch-` 开头的 UUID（如 `batch-7762e81c-bb01-439d-9904-3
 
 ### Step 2 - 跑下载脚本
 
+执行本 skill 目录下的 `download.py`（与本 SKILL.md 同目录）。Claude 根据读到本 SKILL.md 的位置自动构造绝对路径，**不要写死 `~/.claude/skills/...`**——plugin 安装后实际路径在 `~/.claude/plugins/cache/<owner>/ops-skills/skills/xcmo-download/download.py`。
+
 ```bash
-python3 ~/.claude/skills/xcmo-download/download.py \
+python3 <skill-dir>/download.py \
   --external "batch-A,batch-B" \
   --internal "batch-X"
 ```
