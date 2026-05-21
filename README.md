@@ -147,6 +147,7 @@ ops-skills/
 │       ├── SKILL.md
 │       └── download.py            # urllib + python-docx
 ├── tests/test_download.py    # pytest 单测（27 case）
+├── docs/PLUGIN_DESIGN_GUIDE.md  # ⭐ 想做自己的 plugin？看这份指南
 ├── bump-version.sh           # 同步 plugin.json + marketplace.json 版本
 ├── CHANGELOG.md
 ├── LICENSE                   # Apache 2.0
@@ -175,6 +176,14 @@ git add -A && git commit -m "chore: release 1.1.1"
 git tag v1.1.1
 git push && git push --tags
 ```
+
+## 想做自己的 plugin？
+
+我把从这个仓库的演进里总结的「好 plugin 长啥样」整理成了一份心智模型 + 模板集：
+
+📖 **[docs/PLUGIN_DESIGN_GUIDE.md](docs/PLUGIN_DESIGN_GUIDE.md)** — Claude Code Plugin 设计指南
+
+包含：3 个核心理念、5 个生命周期层、5 条铁律、成熟度自检阶梯、6 份可直接抄的模板（plugin.json / marketplace.json / SKILL.md / CHANGELOG / CI / bump 脚本）。
 
 ## 反馈
 
