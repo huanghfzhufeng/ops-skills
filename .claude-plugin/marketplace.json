@@ -1,0 +1,17 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "ops-skills",
+  "description": "运营自动化 Claude Code skill 集合：美区 TikTok 热点抓取 + 飞书推送 + xcmo 批次产物下载打包。",
+  "owner": {
+    "name": "huanghfzhufeng",
+    "url": "https://github.com/huanghfzhufeng"
+  },
+  "plugins": [
+    {
+      "name": "ops-skills",
+      "source": "./",
+      "description": "运营自动化 Claude Code skill 集合：美区 TikTok 热点抓取 + 飞书推送 + xcmo 批次产物下载打包。",
+      "version": "1.0.0"
+    }
+  ]
+}

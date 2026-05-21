@@ -11,8 +11,10 @@
 
 ```
 /plugin marketplace add huanghfzhufeng/ops-skills
-/plugin install ops-skills@huanghfzhufeng/ops-skills
+/plugin install ops-skills@ops-skills
 ```
+
+第 1 行用 `<owner>/<repo>` 注册 marketplace；第 2 行 `<plugin-name>@<marketplace-name>` 装具体 plugin。
 
 装完两个 skill 会以 `ops-skills:us-trend-scout` / `ops-skills:xcmo-download` 命名空间出现，触发关键词都已写在各自 `SKILL.md` 的 `description` 里。
 
