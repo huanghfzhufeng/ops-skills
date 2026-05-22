@@ -4,6 +4,34 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [4.1.0] - 2026-05-22
+
+### Removed (Breaking — 但用户主动要求)
+
+- **us-trend-scout 下线「推飞书」功能**。简报现在直接 dump 到对话给用户看。
+  - 删 SKILL.md 的 Step 8（推飞书 curl 调用整段）
+  - 删 `config.example.yaml`（飞书 webhook 配置模板）
+  - 改 SKILL.md description：去掉「飞书推送」字眼
+  - 改 SKILL.md「首次使用」段：从「配 webhook URL」改成「无需配置即可用」
+  - 改 Step 1：只读 `personas.yaml`，不再读 `us-trend-scout.yaml`
+
+### Changed
+
+- plugin.json + marketplace.json description 同步：把「配 26 数字角色推飞书」改成「配 26 数字角色出创意，简报输出到对话」
+- README.md：us-trend-scout 描述、用户配置表、安装命令同步更新
+- `plugin.json::keywords` 里的 `feishu` / `lark` **保留**（marketplace SEO，未来如果恢复推送功能这两个 keyword 仍相关）
+
+### Rationale
+
+用户当前阶段不再需要推飞书。简报直接出现在 Claude 对话里更直接，省一道配置门槛。未来如果需要恢复推送（飞书 / 微信 / Telegram / 邮件），加回来即可。
+
+### Migration
+
+老用户：原 `~/.config/ops-skills/us-trend-scout.yaml` 文件可保留（脚本不再读它，无害），或手动删除：
+```bash
+rm ~/.config/ops-skills/us-trend-scout.yaml
+```
+
 ## [4.0.3] - 2026-05-22
 
 ### Added

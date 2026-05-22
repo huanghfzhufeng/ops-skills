@@ -1,60 +1,41 @@
 ---
 name: us-trend-scout
-description: 美区 TikTok 热点抓取 + 飞书推送。每天用 6 路并行 web search 抓美区前一天热点（健康/美妆/健身/科技 + 平台格式 + 文化情绪），筛 5-8 条配对 26 个数字角色出具体创意，加平台格式趋势 + 文化情绪，输出中文纯文本简报推飞书群。触发：用户说"热点日报"、"美区热点"、"us trend"、"trend scout"、"跑一次热点"，或被 /schedule 定时触发。
+description: 美区 TikTok 热点抓取 + 26 数字角色创意配对。每天用 6 路并行 web search 抓美区前一天热点（健康/美妆/健身/科技 + 平台格式 + 文化情绪），筛 5-8 条配对 26 个数字角色出具体创意，加平台格式趋势 + 文化情绪，输出中文纯文本简报到对话。触发：用户说"热点日报"、"美区热点"、"us trend"、"trend scout"、"跑一次热点"，或被 /schedule 定时触发。
 ---
 
 # US Trend Scout
 
-给运营推送美区热点 + 26 数字角色创意配对，作为选题灵感。每天北京时间 9:00 自动跑（= 美东前一天晚上 8-9 点）。
+抓美区 TikTok 热点 + 26 数字角色创意配对，作为选题灵感。每天北京时间 9:00 自动跑（= 美东前一天晚上 8-9 点）。
+
+简报**直接 dump 到对话**给运营看（飞书推送功能已下线，未来视需求恢复）。
 
 ## 首次使用
 
-配置文件放在 user-level 目录 `~/.config/ops-skills/`（跨 plugin 升级保留，不会丢）：
+无需任何配置即可使用。
+
+**想自定义 26 个数字角色**（可选）：
 
 ```bash
 mkdir -p ~/.config/ops-skills
-
-# 拷一份 config 模板过去
-cp <skill-dir>/config.example.yaml ~/.config/ops-skills/us-trend-scout.yaml
-
-# 编辑填入飞书 webhook URL
-$EDITOR ~/.config/ops-skills/us-trend-scout.yaml
-```
-
-webhook 格式：`https://open.feishu.cn/open-apis/bot/v2/hook/xxxxxxxxxxxx`
-
-webhook 没填时仍可跑（产出简报 dump 到对话，方便调试），但不会推飞书。
-
-**想自定义 26 个数字角色** → 同样的方式覆盖 `personas.yaml`：
-
-```bash
 cp <skill-dir>/personas.yaml ~/.config/ops-skills/personas.yaml
 $EDITOR ~/.config/ops-skills/personas.yaml
 ```
 
+跨 plugin 升级保留。
+
 ## 工作流（按顺序执行）
 
-### Step 1 - 读配置（**user-level 优先 + plugin 自带 fallback**）
+### Step 1 - 读 personas.yaml
 
-按以下顺序加载两份 yaml：
+按以下顺序加载数字角色定义：
 
-**personas.yaml**（26 数字角色 + 4 赛道映射）：
 1. 优先读 `~/.config/ops-skills/personas.yaml`（用户自定义）
-2. 找不到则 fallback 到本 skill 目录下的 `personas.yaml`（plugin 自带默认）
+2. 找不到则 fallback 到本 skill 目录下的 `personas.yaml`（plugin 自带 26 角色默认）
 
-**us-trend-scout.yaml**（飞书 webhook URL）：
-1. 优先读 `~/.config/ops-skills/us-trend-scout.yaml`（用户配置，**跨升级保留**）
-2. 找不到则提示用户先按"首次使用"段落创建，但仍可继续（webhook 跳过推送）
-
-实现提示（用 Bash 检查文件）：
 ```bash
-USER_CONFIG="$HOME/.config/ops-skills/us-trend-scout.yaml"
 USER_PERSONAS="$HOME/.config/ops-skills/personas.yaml"
-[ -f "$USER_CONFIG" ] && CONFIG="$USER_CONFIG" || CONFIG="<skill-dir>/config.example.yaml"
 [ -f "$USER_PERSONAS" ] && PERSONAS="$USER_PERSONAS" || PERSONAS="<skill-dir>/personas.yaml"
 ```
-
-**注意**：plugin 目录里的 `config.yaml` 已废弃（升级会丢）。一律走 `~/.config/ops-skills/` 路径。
 
 ### Step 2 - 算日期
 
@@ -102,36 +83,17 @@ USER_PERSONAS="$HOME/.config/ops-skills/personas.yaml"
 
 按下方"输出格式"，**纯文本，无 markdown 符号**。
 
-### Step 8 - 推飞书
+### Step 8 - 输出 + 报告
 
-从 Step 1 已加载的 `$CONFIG`（即 `~/.config/ops-skills/us-trend-scout.yaml`）里读 `feishu_webhook_url`，用 Bash:
-
-```bash
-curl -sS -X POST "$WEBHOOK_URL" \
-  -H "Content-Type: application/json" \
-  -d @briefing.json
-```
-
-`briefing.json` 形如：
-```json
-{"msg_type": "text", "content": {"text": "<简报全文，换行用 \\n>"}}
-```
-
-注意 JSON 转义：换行用 `\n`，引号用 `\"`。
-
-如果 webhook URL 是占位符（包含 `xxxxx` 或为空），跳过推送，提示用户先填配置。
-
-### Step 9 - 报告
-
-向用户汇报：
-- 飞书 HTTP 状态码（200 OK / 错误）
+把整份简报**直接 dump 到对话**给用户看。然后简要报告：
 - 简报字符数
 - 6 路 search 全部成功 / 几路失败
 - 热点条数
+- 涉及人物数
 
 ---
 
-## 输出格式（飞书纯文本）
+## 输出格式（纯文本）
 
 ```
 美区热点日报 | 5月20日（周三）
@@ -177,6 +139,4 @@ UTC 01:00 = 北京 09:00（美东前一天晚上）。
 ## 失败处理
 
 - WebSearch 失败：retry 1 次。仍失败 → 用剩下成功的几路 + 在报告里标 "X/6 路成功"
-- 飞书 webhook 返回非 200：把 response body + 简报全文 dump 给用户
-- yaml 缺失：明确报错路径 + 提示去补
-- webhook URL 是占位符：跳过推送，简报直接 dump 到对话
+- personas.yaml 缺失：明确报错路径 + 提示去补

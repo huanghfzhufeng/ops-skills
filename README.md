@@ -9,7 +9,7 @@
 
 | Skill | 干啥 | 触发 |
 |---|---|---|
-| **us-trend-scout** | 每天自动抓美区 TikTok 热点 → 配 26 数字角色出创意 → 推飞书 | 「跑一次热点」 |
+| **us-trend-scout** | 每天自动抓美区 TikTok 热点 → 配 26 数字角色出创意 → 简报到对话 | 「跑一次热点」 |
 | **xcmo-mobile** | 按邮箱+日期从 xcmo 拉视频 → 按人物分组 → 起本地服务 + 二维码 → 手机扫码看视频/复制文案 | 「下载 \<邮箱\> \<日期\>」|
 
 ---
@@ -22,9 +22,8 @@
 
 ```bash
 git clone https://github.com/huanghfzhufeng/ops-skills.git /tmp/ops-skills && \
-mkdir -p ~/.claude/skills ~/.config/ops-skills && \
+mkdir -p ~/.claude/skills && \
 cp -r /tmp/ops-skills/skills/* ~/.claude/skills/ && \
-cp /tmp/ops-skills/skills/us-trend-scout/config.example.yaml ~/.config/ops-skills/us-trend-scout.yaml && \
 pip3 install --user --break-system-packages qrcode pillow 2>/dev/null; \
 echo "✅ 装好，请完全退出 Claude Desktop App（⌘+Q）再打开"
 ```
@@ -56,8 +55,7 @@ us-trend-scout 全用 WebSearch + 标准库，无额外依赖。
 
 | 文件 | 作用 | 必填 |
 |---|---|---|
-| `~/.config/ops-skills/us-trend-scout.yaml` | 飞书 webhook URL | 否（不填则简报 dump 到对话）|
-| `~/.config/ops-skills/personas.yaml` | 自定义 26 数字角色 | 否 |
+| `~/.config/ops-skills/personas.yaml` | 自定义 26 数字角色（覆盖默认）| 否 |
 | `~/.claude/memory/xcmo-session.json` | xcmo 平台 vee_session token | **xcmo-mobile 必填** |
 
 **首次配置 xcmo token**：
@@ -73,7 +71,7 @@ us-trend-scout 全用 WebSearch + 标准库，无额外依赖。
 触发：跟 Claude 说「跑一次热点」/「美区热点」/「us trend」
 ```
 
-6 路并行 WebSearch → 筛 5-8 条具体可证实的热点 → 每条配 1-2 个数字角色 → 推飞书群。
+6 路并行 WebSearch → 筛 5-8 条具体可证实的热点 → 每条配 1-2 个数字角色 → 简报直接 dump 到对话（飞书推送已下线）。
 
 **定时执行**：
 
