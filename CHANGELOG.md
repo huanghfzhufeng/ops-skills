@@ -115,7 +115,7 @@ rm ~/.config/ops-skills/us-trend-scout.yaml
 
 ### Migration
 
-老用户：以前用 `下载 batch xxx 外部` 的工作流不再支持。改用 `下载 luyuyue@liao.com 2026-05-22 的内容`。
+老用户：以前用 `下载 batch xxx 外部` 的工作流不再支持。改用 `下载 your-email@example.com 2026-05-22 的内容`。
 
 ## [3.0.0] - 2026-05-22
 

@@ -87,10 +87,10 @@ UTC 01:00 = 北京 09:00。
 
 ```
 触发：跟 Claude 说
-  下载 luyuyue@liao.com 2026-05-22 的内容
-  拉 luyuyue@liao.com 2026-05-21~2026-05-22 的素材
-  luyuyue@liao.com 2026-05-22
-  mobile share luyuyue@liao.com 2026-05-22
+  下载 your-email@example.com 2026-05-22 的内容
+  拉 your-email@example.com 2026-05-21~2026-05-22 的素材
+  your-email@example.com 2026-05-22
+  mobile share your-email@example.com 2026-05-22
 ```
 
 Claude 会：
@@ -123,8 +123,7 @@ ops-skills/
 ├── skills/
 │   ├── us-trend-scout/
 │   │   ├── SKILL.md
-│   │   ├── personas.yaml          # 默认 26 数字角色
-│   │   └── config.example.yaml    # webhook 模板
+│   │   └── personas.yaml          # 默认 26 数字角色
 │   └── xcmo-mobile/
 │       ├── SKILL.md
 │       ├── mobile.py              # 核心脚本

@@ -4,10 +4,10 @@
 起本地 HTTP 服务器供手机扫码访问（看视频/复制文案/复制标签）。
 
 典型用法：
-    python3 mobile.py --email luyuyue@liao.com --date 2026-05-22
-    python3 mobile.py --email luyuyue@liao.com --date 2026-05-21~2026-05-22
-    python3 mobile.py --email luyuyue@liao.com --date 2026-05-22 --no-serve
-    python3 mobile.py --email luyuyue@liao.com --date 2026-05-22 --port 9000
+    python3 mobile.py --email your-email@example.com --date 2026-05-22
+    python3 mobile.py --email your-email@example.com --date 2026-05-21~2026-05-22
+    python3 mobile.py --email your-email@example.com --date 2026-05-22 --no-serve
+    python3 mobile.py --email your-email@example.com --date 2026-05-22 --port 9000
 
 读取 ~/.claude/memory/xcmo-session.json 拿 vee_session token 做认证。
 
@@ -500,7 +500,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="xcmo-mobile: 按邮箱+日期拉素材生成本地手机分享站",
     )
-    parser.add_argument("--email", required=True, help="目标用户邮箱（如 luyuyue@liao.com）")
+    parser.add_argument("--email", required=True, help="目标用户邮箱（如 your-email@example.com）")
     parser.add_argument(
         "--date", required=True,
         help="日期: '2026-05-22' 或区间 '2026-05-21~2026-05-22'",

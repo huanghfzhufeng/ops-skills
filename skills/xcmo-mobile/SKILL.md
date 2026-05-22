@@ -9,22 +9,42 @@ description: 按邮箱+日期从 xcmo 平台拉该用户当天生成的所有视
 
 **典型工作流**：电脑跑 skill → 自动起服务器 → 手机扫人物二维码 → 看视频 + 复制文案/标签 → 切到 TikTok App 粘贴发布。
 
+## 首次使用
+
+第一次跑前必须完成两步，否则会以退出码 2 或 3 失败。
+
+### 1. 装 Python 依赖
+
+```bash
+pip3 install qrcode pillow
+```
+
+### 2. 设置 xcmo session token
+
+1. 浏览器打开 https://xcmo.ai 登录
+2. F12 → Application → Cookies → 找 `vee_session` → 复制 value
+3. 跟 Claude 说："更新 xcmo token: <粘贴 token>"
+
+Claude 会把 token 写到 `~/.claude/memory/xcmo-session.json`（权限 0600）。
+
+完成上面两步后，直接说 "下载 <你的邮箱> <日期> 的内容" 即可触发。
+
 ## 触发示例
 
 ```
-下载 luyuyue@liao.com 2026-05-22 的内容
+下载 your-email@example.com 2026-05-22 的内容
 ```
 
 ```
-拉 luyuyue@liao.com 2026-05-21~2026-05-22 的素材
+拉 your-email@example.com 2026-05-21~2026-05-22 的素材
 ```
 
 ```
-mobile share luyuyue@liao.com 2026-05-22
+mobile share your-email@example.com 2026-05-22
 ```
 
 ```
-luyuyue@liao.com 2026-05-22
+your-email@example.com 2026-05-22
 ```
 
 **更新 token**（当之前的失效时）：
@@ -52,7 +72,7 @@ luyuyue@liao.com 2026-05-22
 
 ```bash
 python3 <skill-dir>/mobile.py \
-  --email "luyuyue@liao.com" \
+  --email "your-email@example.com" \
   --date "2026-05-22" \
   --background
 ```
@@ -132,7 +152,7 @@ p.chmod(0o600)
 ## 输出文件结构
 
 ```
-~/Desktop/xcmo-mobile/luyuyue@liao.com/20260522/
+~/Desktop/xcmo-mobile/your-email@example.com/20260522/
 └── site/
     ├── index.html             # 总览：所有人物 + 各自二维码
     ├── ava.html               # ava 的视频详情页
