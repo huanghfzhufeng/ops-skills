@@ -4,6 +4,25 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [4.2.0] - 2026-05-22
+
+### Added
+
+- **`install.command` 一键双击安装**（macOS）—— 给不懂终端的朋友：
+  - 下载 `install.command` 到本地
+  - 右键 → 打开（首次过 Gatekeeper）
+  - 终端自动弹出 + 自动装 skill + 自动装 Python 依赖
+  - 全程**零终端命令、零代码**
+  - 装完提示「⌘+Q 退出 Claude Desktop App 重开」
+- README.md 安装段重排：
+  - **方式 1**：双击安装（最推荐，给小白）
+  - **方式 2**：终端粘命令（不怕终端的）
+  - **方式 3**：Claude Code CLI（开发者）
+
+### Rationale
+
+之前最简的「方式 1」需要打开终端 + 复制粘贴 5 行命令，对完全不懂技术的朋友仍是门槛。`install.command` 是 macOS 原生「双击执行」机制（其实就是带 `.command` 后缀的 bash 脚本），双击会自动用 Terminal.app 打开 + 跑。首次过一下 Gatekeeper 即可，之后双击就装。
+
 ## [4.1.0] - 2026-05-22
 
 ### Removed (Breaking — 但用户主动要求)
