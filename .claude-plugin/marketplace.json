@@ -11,7 +11,7 @@
       "name": "ops-skills",
       "source": "./",
       "description": "美区 TikTok 矩阵运营 Claude 工具集：(1) 每天自动抓美区 TikTok 热点配 26 数字角色推飞书；(2) 按邮箱+日期从 xcmo 拉视频按人物分组下载并生成可手机扫码的本地分享站。",
-      "version": "4.0.0",
+      "version": "4.0.1",
       "category": "content-creation",
       "homepage": "https://github.com/huanghfzhufeng/ops-skills"
     }

@@ -243,9 +243,19 @@ def render_item(asset: dict, character_id: str, index: int) -> str:
     caption = asset.get("caption") or ""
     tags = " ".join(asset.get("asset_hashtags") or [])
 
+    # 合并文案 + 标签为一段：一次复制粘到抖音 / TikTok 描述框就完事
+    if caption and tags:
+        combined = f"{caption}\n\n{tags}"
+    elif caption:
+        combined = caption
+    elif tags:
+        combined = tags
+    else:
+        combined = ""
+
     # data-text 用于 JS 复制，要 escape 引号
-    caption_attr = html.escape(caption, quote=True)
-    tags_attr = html.escape(tags, quote=True)
+    combined_attr = html.escape(combined, quote=True)
+    combined_display = html.escape(combined) if combined else "—"
 
     return f"""<section class="video-item">
   <h2>视频 {index}</h2>
@@ -255,13 +265,8 @@ def render_item(asset: dict, character_id: str, index: int) -> str:
   <a class="btn-download" href="{html.escape(video_src)}" download>📥 下载视频</a>
 
   <div class="copy-section">
-    <h3>📝 文案 <button class="btn-copy" data-text="{caption_attr}">📋 复制</button></h3>
-    <pre>{html.escape(caption) if caption else "—"}</pre>
-  </div>
-
-  <div class="copy-section">
-    <h3>🏷️ 标签 <button class="btn-copy" data-text="{tags_attr}">📋 复制</button></h3>
-    <pre>{html.escape(tags) if tags else "—"}</pre>
+    <h3>📝 文案 + 标签 <button class="btn-copy" data-text="{combined_attr}">📋 一键复制</button></h3>
+    <pre>{combined_display}</pre>
   </div>
 </section>
 """
@@ -314,7 +319,22 @@ def render_character_page(character_id: str, assets: list, email: str, date_rang
 
 # ─── 主流程 ────────────────────────────────────────────────────────────
 
-def serve_site(site_dir: Path, port: int, lan_ip: str) -> None:
+CACHE_FILE_NAME = "_cache.json"
+
+
+def print_box(title: str, lines: list[str]) -> None:
+    """打印一个 ASCII 框框包住的多行内容，让重要信息更显眼。"""
+    width = max(len(title), max((len(line) for line in lines), default=0)) + 2
+    bar = "─" * width
+    print(f"\n┌{bar}┐")
+    print(f"│ {title.ljust(width - 1)}│")
+    print(f"├{bar}┤")
+    for line in lines:
+        print(f"│ {line.ljust(width - 1)}│")
+    print(f"└{bar}┘")
+
+
+def serve_site(site_dir: Path, port: int) -> None:
     """切换 cwd 到 site_dir，起 HTTP 服务，阻塞直到 Ctrl+C。"""
     os.chdir(site_dir)
     handler = http.server.SimpleHTTPRequestHandler
@@ -331,6 +351,132 @@ def serve_site(site_dir: Path, port: int, lan_ip: str) -> None:
             print("\n👋 服务已停止")
 
 
+def resolve_out_dir(
+    cli_out_dir: str, email: str, date_from: str, date_to: str,
+) -> Path:
+    """决定输出根目录路径。"""
+    if cli_out_dir:
+        return Path(cli_out_dir)
+    date_str = (
+        date_from.replace("-", "")
+        if date_from == date_to
+        else f"{date_from.replace('-', '')}-{date_to.replace('-', '')}"
+    )
+    return Path.home() / "Desktop" / "xcmo-mobile" / email / date_str
+
+
+def fetch_by_character(
+    args_email: str, date_from: str, date_to: str, session: dict,
+) -> dict:
+    """跑 API 拉数据，返回 character_id → list[asset] 的 dict。"""
+    # Step 1: /api/auth/me 拿 scope_id
+    me = http_get_json(f"{XCMO_BASE}/api/auth/me", session)
+    scope_id = me["scope_id"]
+    print(f"🔑 当前认证: {me['email']} (scope={scope_id[:8]})")
+
+    # Step 2: 邮箱 → user_id
+    target_user_id = resolve_email_to_user_id(args_email, scope_id, session)
+    print(f"🎯 目标用户: {args_email} → {target_user_id[:8]}")
+
+    # Step 3: 拉 task 列表
+    print(f"📅 日期范围: {date_from} ~ {date_to}")
+    tasks_url = (
+        f"{XCMO_BASE}/api/tasks"
+        f"?date_from={date_from}&date_to={date_to}"
+        f"&submitted_by_user_id={target_user_id}&limit=500"
+    )
+    tasks = http_get_json(tasks_url, session)
+    completed = [
+        t for t in tasks
+        if t.get("status") == "completed" and (t.get("result") or {}).get("asset_id")
+    ]
+    print(f"📊 task: 共 {len(tasks)} 个，completed 且有 asset = {len(completed)}")
+
+    if not completed:
+        return {}
+
+    # Step 4: 拉每个 asset 完整数据，按人物分组
+    print(f"⬇ 拉取 {len(completed)} 个 asset 详细数据...")
+    by_character: dict = defaultdict(list)
+    for task in completed:
+        asset_id = task["result"]["asset_id"]
+        try:
+            assets = http_get_json(
+                f"{XCMO_BASE}/api/assets?asset_id={asset_id}", session,
+            )
+            if assets:
+                a = assets[0]
+                cid = safe_character_id(a.get("character_id"))
+                by_character[cid].append(a)
+        except AuthExpiredError:
+            raise
+        except (RuntimeError, json.JSONDecodeError) as e:
+            print(f"  ⚠ asset {asset_id[:8]} 拉取失败: {e}", file=sys.stderr)
+
+    return dict(by_character)
+
+
+def download_all_videos(by_character: dict, videos_dir: Path, session: dict) -> None:
+    """按人物分组下载视频 + 缩略图。"""
+    print("⬇ 下载视频和缩略图...")
+    for cid, assets in by_character.items():
+        char_dir = videos_dir / cid
+        char_dir.mkdir(parents=True, exist_ok=True)
+        for asset in assets:
+            video_name = video_filename(asset)
+            thumb_name = thumb_filename(asset)
+            video_dest = char_dir / video_name
+            thumb_dest = char_dir / thumb_name
+
+            file_url = asset.get("file_url")
+            if file_url and not video_dest.exists():
+                print(f"   ⬇ {cid}/{video_name}")
+                download_file(file_url, video_dest, session)
+
+            thumb_url = asset.get("thumb_url")
+            if thumb_url and not thumb_dest.exists():
+                download_file(thumb_url, thumb_dest, session)
+
+
+def render_site_files(
+    by_character: dict, site_dir: Path, qrcodes_dir: Path,
+    email: str, date_range_str: str, lan_ip: str, port: int,
+) -> None:
+    """生成二维码 PNG + HTML 文件 + CSS。fail-fast：写完立刻校验。"""
+    # 二维码
+    print(f"🔲 生成 {len(by_character)} 个二维码 (URL: http://{lan_ip}:{port}/<人物>.html)...")
+    for cid in by_character:
+        url = f"http://{lan_ip}:{port}/{cid}.html"
+        img = qrcode.make(url)
+        img.save(qrcodes_dir / f"{cid}.png")
+
+    # HTML 文件
+    print("📝 生成 HTML 站...")
+    index_path = site_dir / "index.html"
+    index_path.write_text(
+        render_index(by_character, email, date_range_str), encoding="utf-8",
+    )
+    if index_path.stat().st_size < 100:
+        raise RuntimeError(f"index.html 写入失败或为空: {index_path}")
+
+    for cid, assets in by_character.items():
+        char_path = site_dir / f"{cid}.html"
+        char_path.write_text(
+            render_character_page(cid, assets, email, date_range_str),
+            encoding="utf-8",
+        )
+        if char_path.stat().st_size < 100:
+            raise RuntimeError(f"{cid}.html 写入失败或为空: {char_path}")
+
+    # CSS
+    css_path = site_dir / "style.css"
+    css_path.write_text(
+        (TEMPLATES_DIR / "style.css").read_text(encoding="utf-8"), encoding="utf-8",
+    )
+    if css_path.stat().st_size < 100:
+        raise RuntimeError(f"style.css 写入失败: {css_path}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="xcmo-mobile: 按邮箱+日期拉素材生成本地手机分享站",
@@ -343,145 +489,107 @@ def main() -> None:
     parser.add_argument("--out-dir", default="", help="输出根目录（默认 ~/Desktop/xcmo-mobile/<email>/<date>/）")
     parser.add_argument("--port", type=int, default=8080, help="HTTP 服务端口（默认 8080）")
     parser.add_argument("--no-serve", action="store_true", help="只生成文件，不起服务")
+    parser.add_argument(
+        "--refresh-only", action="store_true",
+        help="跳过 API 调用 + 视频下载，只用本地缓存重生 HTML+二维码（切 WiFi 后用）",
+    )
     args = parser.parse_args()
 
-    session = load_session()
     date_from, date_to = parse_date_range(args.date)
+    out_root = resolve_out_dir(args.out_dir, args.email, date_from, date_to)
+    site_dir = out_root / "site"
+    videos_dir = site_dir / "videos"
+    qrcodes_dir = site_dir / "qrcodes"
+    cache_path = site_dir / CACHE_FILE_NAME
 
     try:
-        # Step 1: /api/auth/me 拿 scope_id
-        me = http_get_json(f"{XCMO_BASE}/api/auth/me", session)
-        scope_id = me["scope_id"]
-        print(f"🔑 当前认证: {me['email']} (scope={scope_id[:8]})")
-
-        # Step 2: 邮箱 → user_id
-        target_user_id = resolve_email_to_user_id(args.email, scope_id, session)
-        print(f"🎯 目标用户: {args.email} → {target_user_id[:8]}")
-
-        # Step 3: 拉 task 列表
-        print(f"📅 日期范围: {date_from} ~ {date_to}")
-        tasks_url = (
-            f"{XCMO_BASE}/api/tasks"
-            f"?date_from={date_from}&date_to={date_to}"
-            f"&submitted_by_user_id={target_user_id}&limit=500"
-        )
-        tasks = http_get_json(tasks_url, session)
-        completed = [
-            t for t in tasks
-            if t.get("status") == "completed" and (t.get("result") or {}).get("asset_id")
-        ]
-        print(f"📊 task: 共 {len(tasks)} 个，completed 且有 asset = {len(completed)}")
-
-        if not completed:
-            print("（没有可下载的内容，退出）", file=sys.stderr)
-            sys.exit(0)
-
-        # Step 4: 拉每个 asset 完整数据，按人物分组
-        print(f"⬇ 拉取 {len(completed)} 个 asset 详细数据...")
-        by_character = defaultdict(list)
-        for task in completed:
-            asset_id = task["result"]["asset_id"]
-            try:
-                assets = http_get_json(
-                    f"{XCMO_BASE}/api/assets?asset_id={asset_id}", session,
+        # 决定数据来源：refresh-only 走缓存，否则跑 API
+        if args.refresh_only:
+            if not cache_path.exists():
+                print(
+                    f"❌ --refresh-only 需要本地缓存，但 {cache_path} 不存在。\n"
+                    f"   请先跑一次正常模式（不带 --refresh-only）。",
+                    file=sys.stderr,
                 )
-                if assets:
-                    a = assets[0]
-                    cid = safe_character_id(a.get("character_id"))
-                    by_character[cid].append(a)
-            except AuthExpiredError:
-                raise
-            except (RuntimeError, json.JSONDecodeError) as e:
-                print(f"  ⚠ asset {asset_id[:8]} 拉取失败: {e}", file=sys.stderr)
+                sys.exit(1)
+            cache = json.loads(cache_path.read_text(encoding="utf-8"))
+            by_character = cache["by_character"]
+            print(f"♻ refresh-only 模式：从缓存读 {sum(len(a) for a in by_character.values())} 个 asset")
+        else:
+            session = load_session()
+            by_character = fetch_by_character(args.email, date_from, date_to, session)
+            if not by_character:
+                print("（没有可下载的内容，退出）", file=sys.stderr)
+                sys.exit(0)
 
+        # 显示分组（refresh-only 和正常都显示）
         print(f"📁 按人物分组: {len(by_character)} 个人物")
         for cid, assets in sorted(by_character.items(), key=lambda x: -len(x[1])):
             print(f"   · {cid}: {len(assets)} 个")
 
-        # Step 5: 准备输出目录
-        date_str = (
-            date_from.replace("-", "")
-            if date_from == date_to
-            else f"{date_from.replace('-', '')}-{date_to.replace('-', '')}"
-        )
-        out_root = (
-            Path(args.out_dir) if args.out_dir
-            else Path.home() / "Desktop" / "xcmo-mobile" / args.email / date_str
-        )
-        site_dir = out_root / "site"
-        videos_dir = site_dir / "videos"
-        qrcodes_dir = site_dir / "qrcodes"
+        # 准备目录
         site_dir.mkdir(parents=True, exist_ok=True)
         qrcodes_dir.mkdir(parents=True, exist_ok=True)
 
-        # Step 6: 下载视频 + 缩略图
-        print("⬇ 下载视频和缩略图...")
-        for cid, assets in by_character.items():
-            char_dir = videos_dir / cid
-            char_dir.mkdir(parents=True, exist_ok=True)
-            for asset in assets:
-                video_name = video_filename(asset)
-                thumb_name = thumb_filename(asset)
-                video_dest = char_dir / video_name
-                thumb_dest = char_dir / thumb_name
-
-                file_url = asset.get("file_url")
-                if file_url and not video_dest.exists():
-                    print(f"   ⬇ {cid}/{video_name}")
-                    download_file(file_url, video_dest, session)
-
-                thumb_url = asset.get("thumb_url")
-                if thumb_url and not thumb_dest.exists():
-                    download_file(thumb_url, thumb_dest, session)
-
-        # Step 7: 检测 LAN IP + 找端口（决定二维码 URL）
-        lan_ip = get_lan_ip()
-        port = find_free_port(args.port, args.port + 10)
-
-        # Step 8: 生成二维码
-        print(f"🔲 生成 {len(by_character)} 个二维码 (LAN: {lan_ip}:{port})...")
-        for cid in by_character:
-            url = f"http://{lan_ip}:{port}/{cid}.html"
-            img = qrcode.make(url)
-            img.save(qrcodes_dir / f"{cid}.png")
-
-        # Step 9: 渲染 HTML
-        print("📝 生成 HTML 站...")
-        date_range_str = (
-            date_from if date_from == date_to else f"{date_from} ~ {date_to}"
-        )
-
-        (site_dir / "index.html").write_text(
-            render_index(by_character, args.email, date_range_str),
-            encoding="utf-8",
-        )
-        for cid, assets in by_character.items():
-            (site_dir / f"{cid}.html").write_text(
-                render_character_page(cid, assets, args.email, date_range_str),
+        # 下载视频（refresh-only 跳过）
+        if not args.refresh_only:
+            videos_dir.mkdir(parents=True, exist_ok=True)
+            download_all_videos(by_character, videos_dir, session)
+            # 写缓存供下次 --refresh-only 用
+            cache_path.write_text(
+                json.dumps({
+                    "email": args.email,
+                    "date_from": date_from,
+                    "date_to": date_to,
+                    "by_character": by_character,
+                }, ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
 
-        # CSS
-        (site_dir / "style.css").write_text(
-            (TEMPLATES_DIR / "style.css").read_text(encoding="utf-8"),
-            encoding="utf-8",
+        # 检测 LAN IP + 找端口
+        lan_ip = get_lan_ip()
+        port = find_free_port(args.port, args.port + 10)
+        if port != args.port:
+            print(
+                f"⚠️  请求端口 {args.port} 被占用，自动改用 {port}",
+                file=sys.stderr,
+            )
+
+        # 生成 HTML + 二维码（fail-fast 内部已 stat 检查）
+        date_range_str = (
+            date_from if date_from == date_to else f"{date_from} ~ {date_to}"
+        )
+        render_site_files(
+            by_character, site_dir, qrcodes_dir,
+            args.email, date_range_str, lan_ip, port,
         )
 
-        print(f"\n✅ 完成")
-        print(f"📁 站点目录: {site_dir}")
+        # 显眼的完成提示
+        print_box("✅ 完成", [
+            f"邮箱: {args.email}",
+            f"日期: {date_range_str}",
+            f"人物: {len(by_character)} 个 · 视频: {sum(len(a) for a in by_character.values())} 个",
+            f"目录: {site_dir}",
+        ])
 
-        # Step 10: 起服务（除非 --no-serve）
+        # 起服务
         if args.no_serve:
-            print(f"\n💡 手动起服务: cd {site_dir} && python3 -m http.server {port}")
+            print_box("💡 手动起服务", [
+                f"cd {site_dir}",
+                f"python3 -m http.server {port}",
+            ])
             return
 
-        print(f"\n🌐 服务器启动:")
-        print(f"   电脑访问: http://localhost:{port}")
-        print(f"   手机扫首页的人物二维码（LAN: http://{lan_ip}:{port}）")
-        print(f"   ⚠️  手机和电脑必须在同一 WiFi")
-        print(f"   ⏹  Ctrl+C 停服务\n")
+        print_box("🌐 服务已启动", [
+            f"电脑访问:  http://localhost:{port}",
+            f"手机扫码:  http://{lan_ip}:{port}（同 WiFi）",
+            f"端口:     {port}（QR 已写入此端口）",
+            "停止:     Ctrl+C",
+            "",
+            "WiFi 换了？跑：mobile.py ... --refresh-only",
+        ])
 
-        serve_site(site_dir, port, lan_ip)
+        serve_site(site_dir, port)
 
     except AuthExpiredError as e:
         print("\n" + "=" * 60, file=sys.stderr)

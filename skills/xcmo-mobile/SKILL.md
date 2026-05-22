@@ -55,9 +55,10 @@ python3 <skill-dir>/mobile.py \
 ```
 
 可选参数：
-- `--port 9000`：指定 HTTP 端口（默认 8080，被占用自动找下一个）
+- `--port 9000`：指定 HTTP 端口（默认 8080，被占用自动找下一个，会显式提示「请求 X 用了 Y」）
 - `--no-serve`：只生成文件不起服务（用户后续手动起）
 - `--out-dir /tmp/test`：自定义输出根目录
+- `--refresh-only`：**切换 WiFi 后用这个**——跳过 API 调用和视频下载，从本地缓存重生二维码和 HTML（秒级完成）。前提是之前已经正常跑过一次（缓存在 `<out-dir>/site/_cache.json`）
 
 脚本自动完成：
 
@@ -77,10 +78,11 @@ python3 <skill-dir>/mobile.py \
 
 脚本结束（无 `--no-serve`）会阻塞在服务器上。Claude 应：
 
-1. 告诉用户**站点已起**：电脑访问 `http://localhost:<port>`
+1. 告诉用户**站点已起**：电脑访问 `http://localhost:<port>`（脚本结尾会打印实际端口的 box 提示）
 2. 提示**手机扫码**：在首页有所有人物的二维码，扫哪个看哪个
 3. 提醒**Ctrl+C 停服务**
 4. **重要前提**：手机和电脑必须在同一 WiFi
+5. **WiFi 换了？** 电脑切换 WiFi 后 LAN IP 会变，旧二维码失效。告诉用户跑同样命令带 `--refresh-only` 重生二维码（秒级），不用重新下载视频
 
 ### Step 4 - Token 失效处理（脚本退出码 4）
 
@@ -167,7 +169,9 @@ p.chmod(0o600)
 | `qrcode` / `pillow` 没装 | 退出码 2 + 提示 `pip3 install qrcode pillow` |
 | 某个 asset 拉取失败 | 跳过 + warning，不阻塞其他 |
 | 某个视频下载失败 | 重试 1 次，仍失败 → 跳过（html 里仍写文案/标签）|
-| 端口被占用 | 自动找 8080..8090 区间内的空闲端口 |
+| 端口被占用 | 自动找 8080..8090 区间内的空闲端口，**显式打印「请求 X 用了 Y」**，避免用户搞混 |
+| WiFi 切换 / IP 变化 | 旧二维码失效，告诉用户跑 `--refresh-only` 用本地缓存秒级重生 |
+| HTML 写入失败（disk full / 权限）| 立刻 RuntimeError + 非 0 退出，不会静默成功 |
 
 ## 退出码
 

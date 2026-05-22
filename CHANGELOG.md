@@ -4,6 +4,25 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [4.0.1] - 2026-05-22
+
+### Added
+
+- **`--refresh-only` 参数** — 切换 WiFi 后用：跳过 API 调用和视频下载，从本地缓存（`<site>/_cache.json`）秒级重生二维码 + HTML（实测 0.16 秒搞定）
+- **box 框框输出** — `✅ 完成` 和「服务已启动」用 ASCII 框包住，URL/端口/路径一目了然
+- **缓存机制** — 每次正常跑会写 `<site>/_cache.json` 保存 by_character 数据，给 `--refresh-only` 用
+
+### Fixed
+
+- **端口被占用时的混淆** — 之前 mobile.py 静默切换到下一个端口，用户不知道。现在 `find_free_port` 找到非请求端口时显式打印「请求 X 用了 Y」
+- **HTML 写入静默失败** — 之前如果磁盘满 / 权限错，可能没写出文件但程序继续打印 "✅ 完成"。现在每写一个文件后 stat 检查大小 ≥100 字节，否则立刻 RuntimeError + 非 0 退出
+- **xcmo-mobile 合并复制按钮** — 文案 + 标签合并成一个「📋 一键复制」按钮，复制出来是「文案 + 空行 + 标签」格式，粘到抖音/TikTok 描述框直接发布
+
+### Changed
+
+- mobile.py 重构为更小函数：`fetch_by_character` / `download_all_videos` / `render_site_files` / `resolve_out_dir`，便于测试和理解
+- SKILL.md 加 `--refresh-only` 用法说明 + WiFi 切换处理指引
+
 ## [4.0.0] - 2026-05-22
 
 ### Changed (Breaking)
