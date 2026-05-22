@@ -4,6 +4,18 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [4.0.2] - 2026-05-22
+
+### Fixed
+
+- **文档表述统一为 TikTok**——之前文档/代码注释里几处写「抖音/TikTok」或「抖音」，但本项目用户做的是**美区 TikTok**（不是国内抖音）。统一改成 TikTok：
+  - README.md（用法描述）
+  - CHANGELOG.md（历史段也修了）
+  - skills/xcmo-mobile/SKILL.md（description + 典型工作流）
+  - skills/xcmo-mobile/mobile.py（注释）
+
+注：`plugin.json` 的 `keywords` 里仍保留 `douyin`（marketplace SEO 用，不影响功能；可能引来国内做相似事的人）。
+
 ## [4.0.1] - 2026-05-22
 
 ### Added
@@ -16,7 +28,7 @@
 
 - **端口被占用时的混淆** — 之前 mobile.py 静默切换到下一个端口，用户不知道。现在 `find_free_port` 找到非请求端口时显式打印「请求 X 用了 Y」
 - **HTML 写入静默失败** — 之前如果磁盘满 / 权限错，可能没写出文件但程序继续打印 "✅ 完成"。现在每写一个文件后 stat 检查大小 ≥100 字节，否则立刻 RuntimeError + 非 0 退出
-- **xcmo-mobile 合并复制按钮** — 文案 + 标签合并成一个「📋 一键复制」按钮，复制出来是「文案 + 空行 + 标签」格式，粘到抖音/TikTok 描述框直接发布
+- **xcmo-mobile 合并复制按钮** — 文案 + 标签合并成一个「📋 一键复制」按钮，复制出来是「文案 + 空行 + 标签」格式，粘到 TikTok 描述框直接发布
 
 ### Changed
 
@@ -30,7 +42,7 @@
 - **xcmo-download → xcmo-mobile 完全替换**。旧的「按 batch ID 下载 + 外部/内部分组打 docx+zip」流程废弃，替换为新流程：
   - **输入变了**：从「batch ID 列表 + 外部/内部分类」改成「邮箱 + 日期」
   - **输出变了**：从 `.docx + .zip` 改成「可手机扫码访问的本地 HTML 站」
-  - **核心场景变了**：从「打包发给南宁合作方」改成「电脑下载 → 手机扫码 → 直接发抖音/TikTok」
+  - **核心场景变了**：从「打包发给南宁合作方」改成「电脑下载 → 手机扫码 → 直接发 TikTok」
 
 ### Added
 

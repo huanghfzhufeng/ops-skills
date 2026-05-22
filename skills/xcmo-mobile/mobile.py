@@ -243,7 +243,7 @@ def render_item(asset: dict, character_id: str, index: int) -> str:
     caption = asset.get("caption") or ""
     tags = " ".join(asset.get("asset_hashtags") or [])
 
-    # 合并文案 + 标签为一段：一次复制粘到抖音 / TikTok 描述框就完事
+    # 合并文案 + 标签为一段：一次复制粘到 TikTok 描述框就完事
     if caption and tags:
         combined = f"{caption}\n\n{tags}"
     elif caption:
