@@ -16,18 +16,9 @@
 
 ## 安装
 
-### 方式 1：双击安装（最小白，零终端）⭐ 推荐
+### 方式 1：Desktop App 用户（最简）
 
-1. **下载 `install.command`** — 点击 [此链接](https://raw.githubusercontent.com/huanghfzhufeng/ops-skills/main/install.command)，保存到「下载」文件夹
-2. **右键** `install.command` → **打开**
-   - 第一次会弹「无法验证开发者」 → 点「打开」（不是「移到废纸篓」！）
-   - 这是 macOS 安全机制，因为这文件没有 Apple 签名（开源项目正常情况）
-3. **终端窗口自动弹出**，按 Enter 开始装
-4. 看到「✅ 装好了！」→ 完全退出 Claude Desktop App（⌘+Q）再打开
-
-**全程零终端命令、零代码**。
-
-### 方式 2：终端粘命令（如果你不怕终端）
+打开 **Mac 终端**（⌘+Space 搜「终端」回车），粘贴这一段：
 
 ```bash
 git clone https://github.com/huanghfzhufeng/ops-skills.git /tmp/ops-skills && \
@@ -37,7 +28,9 @@ pip3 install --user --break-system-packages qrcode pillow 2>/dev/null; \
 echo "✅ 装好，请完全退出 Claude Desktop App（⌘+Q）再打开"
 ```
 
-### 方式 3：Claude Code CLI 用户
+跑完**完全退出 Claude Desktop App**（⌘+Q）再打开。
+
+### 方式 2：Claude Code CLI 用户
 
 ```
 /plugin marketplace add huanghfzhufeng/ops-skills
@@ -46,7 +39,7 @@ echo "✅ 装好，请完全退出 Claude Desktop App（⌘+Q）再打开"
 
 享受标准 plugin 系统（版本管理 + `/plugin upgrade`）。
 
-### Python 依赖（**方式 1 自动装，方式 2/3 手动装**）
+### Python 依赖
 
 ```bash
 pip3 install qrcode pillow              # xcmo-mobile 用
