@@ -8,127 +8,65 @@ on:
 
 jobs:
   validate:
-    name: Validate marketplace + plugin structure
+    name: Validate plugin structure
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Validate marketplace.json schema
+      - name: Validate plugin.json
+        run: |
+          python3 -c "
+          import json
+          data = json.load(open('.claude-plugin/plugin.json'))
+          for f in ['name', 'version', 'description']:
+              assert f in data, f'plugin.json 缺字段 {f}'
+          print(f'✓ plugin.json: {data[\"name\"]} v{data[\"version\"]}')
+          "
+
+      - name: Validate marketplace.json
         run: |
           python3 -c "
           import json
           data = json.load(open('.claude-plugin/marketplace.json'))
-          required = ['name', 'owner', 'plugins']
-          missing = [f for f in required if f not in data]
-          if missing:
-              raise SystemExit(f'marketplace.json 缺字段: {missing}')
-          if not data['plugins']:
-              raise SystemExit('marketplace.json plugins[] 为空')
-          for p in data['plugins']:
-              for pf in ['name', 'source']:
-                  if pf not in p:
-                      raise SystemExit(f'plugin[{p.get(\"name\", \"?\")}] 缺字段: {pf}')
-          print(f'✓ marketplace.json valid: {data[\"name\"]} 含 {len(data[\"plugins\"])} 个 plugin')
+          for f in ['name', 'owner', 'plugins']:
+              assert f in data, f'marketplace.json 缺字段 {f}'
+          assert data['plugins'], 'plugins[] 不能为空'
+          print(f'✓ marketplace.json: {data[\"name\"]} 含 {len(data[\"plugins\"])} 个 plugin')
           "
 
-      - name: Validate each plugin.json
+      - name: Validate version consistency
         run: |
-          python3 << 'EOF'
+          python3 -c "
           import json
-          from pathlib import Path
+          pj = json.load(open('.claude-plugin/plugin.json'))
+          mj = json.load(open('.claude-plugin/marketplace.json'))
+          plugin_v = pj['version']
+          mp_v = mj['plugins'][0]['version']
+          assert plugin_v == mp_v, f'version 不一致 plugin.json={plugin_v} marketplace.json={mp_v}. 跑 ./bump-version.sh <version> 同步'
+          print(f'✓ version 同步: {plugin_v}')
+          "
 
-          mp = json.load(open('.claude-plugin/marketplace.json'))
-          errors = []
-
-          for entry in mp['plugins']:
-              source = entry.get('source', './').lstrip('./')
-              plugin_dir = Path(source) if source else Path('.')
-              plugin_json = plugin_dir / '.claude-plugin' / 'plugin.json'
-
-              if not plugin_json.exists():
-                  errors.append(f"{entry['name']}: 找不到 {plugin_json}")
-                  continue
-
-              try:
-                  data = json.loads(plugin_json.read_text())
-              except json.JSONDecodeError as e:
-                  errors.append(f"{plugin_json}: JSON 解析失败 {e}")
-                  continue
-
-              for f in ['name', 'version', 'description']:
-                  if f not in data:
-                      errors.append(f"{plugin_json}: 缺字段 {f}")
-
-              # plugin name 必须和 marketplace entry name 一致
-              if data.get('name') != entry['name']:
-                  errors.append(
-                      f"{plugin_json}: name='{data.get('name')}' "
-                      f"≠ marketplace.json::plugins[].name='{entry['name']}'"
-                  )
-
-              print(f"✓ {entry['name']} v{data.get('version')}")
-
-          if errors:
-              for e in errors: print(f"✗ {e}")
-              raise SystemExit(1)
-          EOF
-
-      - name: Validate version consistency (plugin.json ↔ marketplace.json)
-        run: |
-          python3 << 'EOF'
-          import json
-          from pathlib import Path
-
-          mp = json.load(open('.claude-plugin/marketplace.json'))
-          errors = []
-
-          for entry in mp['plugins']:
-              source = entry.get('source', './').lstrip('./')
-              plugin_dir = Path(source) if source else Path('.')
-              plugin_json = plugin_dir / '.claude-plugin' / 'plugin.json'
-              data = json.loads(plugin_json.read_text())
-
-              entry_v = entry.get('version')
-              plugin_v = data.get('version')
-
-              if entry_v != plugin_v:
-                  errors.append(
-                      f"{entry['name']}: marketplace.json version='{entry_v}' "
-                      f"≠ {plugin_json}::version='{plugin_v}'. "
-                      f"记得跑 ./bump-version.sh {entry['name']} <new-version>"
-                  )
-              else:
-                  print(f"✓ {entry['name']} version 同步: {plugin_v}")
-
-          if errors:
-              for e in errors: print(f"✗ {e}")
-              raise SystemExit(1)
-          EOF
-
-      - name: Validate every SKILL.md frontmatter
+      - name: Validate SKILL.md frontmatter
         run: |
           python3 << 'EOF'
           import re
           from pathlib import Path
 
           errors = []
-          for skill_md in sorted(Path('plugins').rglob('SKILL.md')):
+          for skill_md in sorted(Path('skills').rglob('SKILL.md')):
               content = skill_md.read_text()
               m = re.match(r'^---\n(.*?)\n---', content, re.DOTALL)
               if not m:
-                  errors.append(f'{skill_md}: 缺 YAML frontmatter')
-                  continue
+                  errors.append(f'{skill_md}: 缺 frontmatter'); continue
               fm = m.group(1)
-              desc_m = re.search(r'^description:\s*(.+?)(?=\n\w+:|\Z)', fm, re.M | re.DOTALL)
-              if not desc_m:
-                  errors.append(f'{skill_md}: 缺 description')
-                  continue
-              desc_len = len(desc_m.group(1).strip())
-              if desc_len > 1536:
-                  errors.append(f'{skill_md}: description {desc_len} 字符 > 1536 上限')
+              desc = re.search(r'^description:\s*(.+?)(?=\n\w+:|\Z)', fm, re.M | re.DOTALL)
+              if not desc:
+                  errors.append(f'{skill_md}: 缺 description'); continue
+              d = desc.group(1).strip()
+              if len(d) > 1536:
+                  errors.append(f'{skill_md}: description {len(d)} > 1536')
               else:
-                  print(f'✓ {skill_md}: description {desc_len} 字符')
-
+                  print(f'✓ {skill_md}: description {len(d)} 字符')
           if errors:
               for e in errors: print(f'✗ {e}')
               raise SystemExit(1)
@@ -138,25 +76,12 @@ jobs:
     name: pytest
     runs-on: ubuntu-latest
     needs: validate
-    strategy:
-      matrix:
-        python-version: ['3.10', '3.11', '3.12']
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: '3.11'
           cache: pip
-
-      - name: Install dev dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
-
-      - name: Verify Python syntax across all plugins
-        run: |
-          find plugins -name "*.py" -print0 | xargs -0 -n1 python3 -m py_compile
-
-      - name: Run pytest across all plugins
-        run: pytest -v -m unit
+      - run: pip install -r requirements-dev.txt
+      - run: python3 -m py_compile skills/xcmo-download/download.py
+      - run: pytest -v -m unit

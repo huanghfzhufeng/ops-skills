@@ -1,12 +1,12 @@
 {
-  "name": "tiktok-matrix",
+  "name": "ops-skills",
   "description": "美区 TikTok 矩阵号运营工具集：每天自动抓美区热点配 26 数字角色推飞书，从 xcmo 平台批量下载 batch 产物按外部/内部分组打包。",
-  "version": "1.0.0",
+  "version": "3.0.0",
   "author": {
     "name": "huanghfzhufeng",
     "url": "https://github.com/huanghfzhufeng"
   },
-  "homepage": "https://github.com/huanghfzhufeng/ops-skills/tree/main/plugins/tiktok-matrix",
+  "homepage": "https://github.com/huanghfzhufeng/ops-skills",
   "repository": "https://github.com/huanghfzhufeng/ops-skills",
   "license": "Apache-2.0",
   "keywords": [
@@ -22,7 +22,6 @@
     "automation",
     "trending",
     "social-media",
-    "video-ops",
-    "matrix-account"
+    "video-ops"
   ]
 }
