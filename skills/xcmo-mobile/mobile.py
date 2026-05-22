@@ -27,6 +27,7 @@ import os
 import re
 import socket
 import socketserver
+import subprocess
 import sys
 import urllib.error
 import urllib.parse
@@ -334,8 +335,8 @@ def print_box(title: str, lines: list[str]) -> None:
     print(f"└{bar}┘")
 
 
-def serve_site(site_dir: Path, port: int) -> None:
-    """切换 cwd 到 site_dir，起 HTTP 服务，阻塞直到 Ctrl+C。"""
+def serve_site_foreground(site_dir: Path, port: int) -> None:
+    """前台模式：切换 cwd 到 site_dir，起 HTTP 服务，阻塞直到 Ctrl+C。"""
     os.chdir(site_dir)
     handler = http.server.SimpleHTTPRequestHandler
 
@@ -349,6 +350,24 @@ def serve_site(site_dir: Path, port: int) -> None:
             httpd.serve_forever()
         except KeyboardInterrupt:
             print("\n👋 服务已停止")
+
+
+def spawn_background_server(site_dir: Path, port: int) -> int:
+    """后台模式：起 `python3 -m http.server` 子进程，脱离当前 shell。返回 PID。
+
+    子进程通过 `start_new_session=True` 脱离父进程会话，父进程退出后
+    子进程继续跑。日志写到 site_dir/_server.log。
+    """
+    log_path = site_dir / "_server.log"
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "http.server", str(port)],
+        cwd=str(site_dir),
+        stdout=open(log_path, "w"),
+        stderr=subprocess.STDOUT,
+        stdin=subprocess.DEVNULL,
+        start_new_session=True,  # POSIX: setsid，脱离父进程
+    )
+    return proc.pid
 
 
 def resolve_out_dir(
@@ -490,6 +509,10 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=8080, help="HTTP 服务端口（默认 8080）")
     parser.add_argument("--no-serve", action="store_true", help="只生成文件，不起服务")
     parser.add_argument(
+        "--background", action="store_true",
+        help="后台起服务 + 自动开浏览器 + mobile.py 立刻退出（Claude 用这个，不会卡住）",
+    )
+    parser.add_argument(
         "--refresh-only", action="store_true",
         help="跳过 API 调用 + 视频下载，只用本地缓存重生 HTML+二维码（切 WiFi 后用）",
     )
@@ -572,7 +595,7 @@ def main() -> None:
             f"目录: {site_dir}",
         ])
 
-        # 起服务
+        # 起服务（三种模式）
         if args.no_serve:
             print_box("💡 手动起服务", [
                 f"cd {site_dir}",
@@ -580,7 +603,29 @@ def main() -> None:
             ])
             return
 
-        print_box("🌐 服务已启动", [
+        if args.background:
+            # 后台模式：起子进程 → 开浏览器 → 退出（不阻塞 Claude）
+            pid = spawn_background_server(site_dir, port)
+            # 给子进程一点时间真正起来
+            import time
+            time.sleep(1)
+            try:
+                webbrowser.open(f"http://localhost:{port}")
+            except (webbrowser.Error, OSError):
+                pass
+            print_box("🌐 服务已后台启动（浏览器自动打开）", [
+                f"电脑访问:  http://localhost:{port}",
+                f"手机扫码:  http://{lan_ip}:{port}（同 WiFi）",
+                f"PID:      {pid}",
+                f"日志:     {site_dir}/_server.log",
+                f"停止:     kill {pid}",
+                "",
+                "WiFi 换了？跑：mobile.py ... --refresh-only --background",
+            ])
+            return
+
+        # 前台模式：阻塞直到 Ctrl+C（人工跑命令时用）
+        print_box("🌐 服务已启动（前台阻塞）", [
             f"电脑访问:  http://localhost:{port}",
             f"手机扫码:  http://{lan_ip}:{port}（同 WiFi）",
             f"端口:     {port}（QR 已写入此端口）",
@@ -589,7 +634,7 @@ def main() -> None:
             "WiFi 换了？跑：mobile.py ... --refresh-only",
         ])
 
-        serve_site(site_dir, port)
+        serve_site_foreground(site_dir, port)
 
     except AuthExpiredError as e:
         print("\n" + "=" * 60, file=sys.stderr)

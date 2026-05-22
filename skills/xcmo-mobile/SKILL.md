@@ -44,21 +44,33 @@ luyuyue@liao.com 2026-05-22
 
 **无法解析时回问用户**，不要瞎猜。
 
-### Step 2 - 跑 mobile.py
+### Step 2 - 跑 mobile.py（**Claude 必须用 `--background`**）
 
 执行本 skill 目录下的 `mobile.py`（与本 SKILL.md 同目录）。Claude 根据读到本 SKILL.md 的位置自动构造绝对路径。
+
+**Claude 在 Bash 里跑时必须加 `--background`**——否则脚本会阻塞在 `httpd.serve_forever()`，Bash 命令卡死，Claude 没法回复用户。
 
 ```bash
 python3 <skill-dir>/mobile.py \
   --email "luyuyue@liao.com" \
-  --date "2026-05-22"
+  --date "2026-05-22" \
+  --background
 ```
 
-可选参数：
-- `--port 9000`：指定 HTTP 端口（默认 8080，被占用自动找下一个，会显式提示「请求 X 用了 Y」）
+`--background` 行为：
+1. 拉数据 + 下载视频 + 生成 HTML/QR（同正常模式）
+2. 起 `python3 -m http.server` 子进程（脱离父进程会话，跑到后台）
+3. **自动 `webbrowser.open(http://localhost:port)`** 在用户默认浏览器打开站点
+4. mobile.py 主进程立刻退出（不阻塞 Bash / Claude）
+
+输出最后会有 box 显示：电脑访问 URL / 手机扫码 URL / PID / 怎么停。
+
+参数：
+- `--background`（**推荐 Claude 默认用**）：后台起服务 + 自动开浏览器 + 立即退出
 - `--no-serve`：只生成文件不起服务（用户后续手动起）
+- `--refresh-only`：**切换 WiFi 后用**——跳过 API 和视频下载，从本地缓存秒级重生二维码 + HTML。可以和 `--background` 组合（`--refresh-only --background`）
+- `--port 9000`：指定 HTTP 端口（默认 8080，被占用自动找下一个，显式提示「请求 X 用了 Y」）
 - `--out-dir /tmp/test`：自定义输出根目录
-- `--refresh-only`：**切换 WiFi 后用这个**——跳过 API 调用和视频下载，从本地缓存重生二维码和 HTML（秒级完成）。前提是之前已经正常跑过一次（缓存在 `<out-dir>/site/_cache.json`）
 
 脚本自动完成：
 
@@ -76,13 +88,17 @@ python3 <skill-dir>/mobile.py \
 
 ### Step 3 - 报告
 
-脚本结束（无 `--no-serve`）会阻塞在服务器上。Claude 应：
+`--background` 模式下，mobile.py 跑完立刻退出，已经做了 3 件事：
+- ✅ 子进程后台跑 http.server
+- ✅ 浏览器自动打开了
+- ✅ box 输出印了 URL + PID
 
-1. 告诉用户**站点已起**：电脑访问 `http://localhost:<port>`（脚本结尾会打印实际端口的 box 提示）
-2. 提示**手机扫码**：在首页有所有人物的二维码，扫哪个看哪个
-3. 提醒**Ctrl+C 停服务**
-4. **重要前提**：手机和电脑必须在同一 WiFi
-5. **WiFi 换了？** 电脑切换 WiFi 后 LAN IP 会变，旧二维码失效。告诉用户跑同样命令带 `--refresh-only` 重生二维码（秒级），不用重新下载视频
+Claude 应该把 box 内容**复述给用户**，并告诉：
+
+1. **浏览器应该已自动打开** `http://localhost:<port>`（如果没自动开，让用户手动复制 URL）
+2. **手机扫首页二维码**（前提是手机和电脑同 WiFi）
+3. **停服务**：`kill <PID>` 或告诉 Claude「停服务」
+4. **WiFi 换了？** 告诉用户跑同样命令带 `--refresh-only --background`，秒级重生不下载
 
 ### Step 4 - Token 失效处理（脚本退出码 4）
 

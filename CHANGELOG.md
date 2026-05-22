@@ -4,6 +4,27 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [4.0.3] - 2026-05-22
+
+### Added
+
+- **`--background` 参数** — Claude 在 Bash 里跑应该用这个：
+  1. 拉数据 + 下载视频 + 生成 HTML/QR
+  2. 起 `python3 -m http.server` 子进程（`start_new_session=True` 脱离会话）
+  3. **自动 `webbrowser.open()` 在用户默认浏览器打开站点**
+  4. mobile.py 主进程立刻退出（不阻塞 Bash / Claude）
+
+  实测：跑完 1.4 秒返回，子进程在后台继续 serve，浏览器自动打开。
+
+### Changed
+
+- `serve_site` 函数拆成 `serve_site_foreground`（前台阻塞）+ `spawn_background_server`（后台 detach）
+- **SKILL.md 明确告诉 Claude 必须用 `--background`** — 否则脚本会阻塞，Claude 无法继续
+
+### Rationale
+
+之前 Claude 在 Bash 里跑 `mobile.py` 不加 `--no-serve` 会卡在 `httpd.serve_forever()`，Bash 命令永远不返回。需要手动用 `--no-serve` + 手动起 server + 手动 open 浏览器（三步）。`--background` 一步搞定 + 自动开浏览器，符合用户期望「跑完自动给我打开网页」。
+
 ## [4.0.2] - 2026-05-22
 
 ### Fixed
