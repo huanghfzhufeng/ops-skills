@@ -4,6 +4,39 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [4.0.0] - 2026-05-22
+
+### Changed (Breaking)
+
+- **xcmo-download → xcmo-mobile 完全替换**。旧的「按 batch ID 下载 + 外部/内部分组打 docx+zip」流程废弃，替换为新流程：
+  - **输入变了**：从「batch ID 列表 + 外部/内部分类」改成「邮箱 + 日期」
+  - **输出变了**：从 `.docx + .zip` 改成「可手机扫码访问的本地 HTML 站」
+  - **核心场景变了**：从「打包发给南宁合作方」改成「电脑下载 → 手机扫码 → 直接发抖音/TikTok」
+
+### Added
+
+- **新 skill `xcmo-mobile`**（`skills/xcmo-mobile/`）：
+  - `mobile.py`：按邮箱+日期拉 xcmo 数据 → 按 `character_id` 分组下载视频 + 缩略图 → 生成 HTML 站 + 二维码 → 起本地 HTTP 服务
+  - `templates/`：3 个文件（index.html / character.html / style.css）—— Apple 风格响应式设计
+  - 二维码：每个人物一张 PNG，扫码直接到该人物详情页
+  - 复制功能：文案/标签一键复制（含 HTTP 协议下的 fallback）
+- **新依赖**：`qrcode` + `pillow`（生成二维码 PNG）
+- **API 支持**（验证 OK）：
+  - `/api/auth/me`（拿 scope_id）
+  - `/api/scopes/{scope_id}/members`（邮箱 → user_id）
+  - `/api/tasks?date_from=X&date_to=Y&submitted_by_user_id=Z`（拉用户当日 task）
+  - `/api/assets?asset_id=X`（拿 asset 完整数据，含 `thumb_url` 用作缩略图）
+
+### Removed
+
+- `skills/xcmo-download/`（旧 skill，已被 xcmo-mobile 替代）
+- `tests/test_download.py`（被 `tests/test_mobile.py` 替换，31 个测试覆盖）
+- `python-docx` 依赖（不再生成 docx）
+
+### Migration
+
+老用户：以前用 `下载 batch xxx 外部` 的工作流不再支持。改用 `下载 luyuyue@liao.com 2026-05-22 的内容`。
+
 ## [3.0.0] - 2026-05-22
 
 ### Changed (Breaking)

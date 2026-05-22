@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "ops-skills",
-  "description": "美区 TikTok 矩阵号运营工具集（单 plugin）：热点抓取 + xcmo 批次下载。",
+  "description": "美区 TikTok 矩阵运营工具集（单 plugin）：热点抓取 + xcmo 视频拉取手机分享。",
   "owner": {
     "name": "huanghfzhufeng",
     "url": "https://github.com/huanghfzhufeng"
@@ -10,8 +10,8 @@
     {
       "name": "ops-skills",
       "source": "./",
-      "description": "美区 TikTok 矩阵号运营工具集：每天自动抓美区热点配 26 数字角色推飞书，从 xcmo 平台批量下载 batch 产物按外部/内部分组打包。",
-      "version": "3.0.0",
+      "description": "美区 TikTok 矩阵运营 Claude 工具集：(1) 每天自动抓美区 TikTok 热点配 26 数字角色推飞书；(2) 按邮箱+日期从 xcmo 拉视频按人物分组下载并生成可手机扫码的本地分享站。",
+      "version": "4.0.0",
       "category": "content-creation",
       "homepage": "https://github.com/huanghfzhufeng/ops-skills"
     }

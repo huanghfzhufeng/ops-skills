@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{CHARACTER_ID}} · {{EMAIL}}</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <p><a href="index.html">← 返回总览</a></p>
+    <h1>{{CHARACTER_ID}}</h1>
+    <p class="meta">{{EMAIL}} · {{DATE_RANGE}} · {{COUNT}} 个视频</p>
+  </header>
+  <main class="detail">
+    {{ITEMS}}
+  </main>
+  <footer>
+    <p>💡 iOS: 长按视频 → 存储到相册</p>
+    <p>💡 点 📋 复制按钮自动复制文案到剪贴板</p>
+  </footer>
+  <script>
+    document.querySelectorAll('.btn-copy').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var text = btn.dataset.text || '';
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(function() {
+            showCopied(btn);
+          }).catch(function() {
+            fallbackCopy(text, btn);
+          });
+        } else {
+          fallbackCopy(text, btn);
+        }
+      });
+    });
+
+    function fallbackCopy(text, btn) {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch (e) {}
+      ta.remove();
+      showCopied(btn);
+    }
+
+    function showCopied(btn) {
+      var orig = btn.textContent;
+      btn.textContent = '✓ 已复制';
+      setTimeout(function() { btn.textContent = orig; }, 1500);
+    }
+  </script>
+</body>
+</html>

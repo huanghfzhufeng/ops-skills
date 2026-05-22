@@ -3,18 +3,20 @@
 [![CI](https://github.com/huanghfzhufeng/ops-skills/actions/workflows/ci.yml/badge.svg)](https://github.com/huanghfzhufeng/ops-skills/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
-美区 TikTok 矩阵号运营工具集，[huanghfzhufeng](https://github.com/huanghfzhufeng) 出品。
+美区 TikTok 矩阵号运营自动化工具集。[huanghfzhufeng](https://github.com/huanghfzhufeng) 出品。
 
-包含两个 skill：
+## 包含的 Skill
 
-- **us-trend-scout** — 每天自动抓美区 TikTok 热点，配 26 个数字角色出具体创意，推飞书群
-- **xcmo-download** — 从 [xcmo.ai](https://xcmo.ai) 批量下载 batch 产物（视频 + 文案 + 标签），按「外部 / 内部」分组打包
+| Skill | 干啥 | 触发 |
+|---|---|---|
+| **us-trend-scout** | 每天自动抓美区 TikTok 热点 → 配 26 数字角色出创意 → 推飞书 | 「跑一次热点」 |
+| **xcmo-mobile** | 按邮箱+日期从 xcmo 拉视频 → 按人物分组 → 起本地服务 + 二维码 → 手机扫码看视频/复制文案 | 「下载 \<邮箱\> \<日期\>」|
 
 ---
 
 ## 安装
 
-### 方式 1：Desktop App 用户（推荐，最简）
+### 方式 1：Desktop App 用户（最简）
 
 打开 **Mac 终端**（⌘+Space 搜「终端」回车），粘贴这一段：
 
@@ -23,11 +25,11 @@ git clone https://github.com/huanghfzhufeng/ops-skills.git /tmp/ops-skills && \
 mkdir -p ~/.claude/skills ~/.config/ops-skills && \
 cp -r /tmp/ops-skills/skills/* ~/.claude/skills/ && \
 cp /tmp/ops-skills/skills/us-trend-scout/config.example.yaml ~/.config/ops-skills/us-trend-scout.yaml && \
-pip3 install --user python-docx 2>/dev/null; \
+pip3 install --user --break-system-packages qrcode pillow 2>/dev/null; \
 echo "✅ 装好，请完全退出 Claude Desktop App（⌘+Q）再打开"
 ```
 
-跑完后**完全退出 Claude Desktop App**（⌘+Q），再打开。跟 Claude 说「跑一次热点」就触发。
+跑完**完全退出 Claude Desktop App**（⌘+Q）再打开。
 
 ### 方式 2：Claude Code CLI 用户
 
@@ -38,48 +40,78 @@ echo "✅ 装好，请完全退出 Claude Desktop App（⌘+Q）再打开"
 
 享受标准 plugin 系统（版本管理 + `/plugin upgrade`）。
 
+### Python 依赖
+
+```bash
+pip3 install qrcode pillow              # xcmo-mobile 用
+```
+
+us-trend-scout 全用 WebSearch + 标准库，无额外依赖。
+
 ---
 
 ## 用户配置（跨升级保留）
 
+所有用户级配置统一放在 `~/.config/ops-skills/` 或 `~/.claude/memory/`，**plugin 升级时这些目录不动**：
+
 | 文件 | 作用 | 必填 |
 |---|---|---|
-| `~/.config/ops-skills/us-trend-scout.yaml` | 飞书 webhook URL | 否（不填则简报 dump 到对话不推送）|
-| `~/.config/ops-skills/personas.yaml` | 自定义 26 数字角色（覆盖默认）| 否 |
-| `~/.claude/memory/xcmo-session.json` | xcmo 平台 session token | xcmo-download 必填 |
+| `~/.config/ops-skills/us-trend-scout.yaml` | 飞书 webhook URL | 否（不填则简报 dump 到对话）|
+| `~/.config/ops-skills/personas.yaml` | 自定义 26 数字角色 | 否 |
+| `~/.claude/memory/xcmo-session.json` | xcmo 平台 vee_session token | **xcmo-mobile 必填** |
+
+**首次配置 xcmo token**：
+1. 浏览器登录 https://xcmo.ai
+2. F12 → Application → Cookies → 复制 `vee_session` 值
+3. 告诉 Claude：「更新 xcmo token: \<粘贴你的 token\>」
 
 ---
 
-## Skills
-
-### us-trend-scout
-
-每天北京 9:00 自动跑 6 路并行 WebSearch，筛 5-8 条**具体可证实**的热点，每条配 1-2 个数字角色出具体创意，推飞书群。
-
-**触发词**：热点日报 / 美区热点 / us trend / 跑一次热点
-
-**飞书 webhook 怎么拿**：飞书群 → 群设置 → 群机器人 → 添加 → 自定义机器人 → 复制 webhook URL。填到 `~/.config/ops-skills/us-trend-scout.yaml` 里。
-
-### xcmo-download
-
-把 xcmo 平台 batch 产物按「外部（南宁合作方）/ 内部（雨悦自运营）」分组下载：
-
-- 外部 → `.docx`（文案+标签）+ `.zip`（视频包），方便整体发合作方
-- 内部 → 只生成 `.docx`，视频文件留 `videos/内部/` 目录直接拿
-
-**触发词**：下载 batch / 打包 batch / 下载这批
-
-**用法**：
+## us-trend-scout 用法
 
 ```
-下载这批：
-外部: batch-7762e81c-bb01-439d-9904-36d2399607bb, batch-aaa
-内部: batch-xxx, batch-yyy
+触发：跟 Claude 说「跑一次热点」/「美区热点」/「us trend」
 ```
 
-**首次配置 xcmo session token**：浏览器登录 xcmo.ai → F12 → Application → Cookies → 复制 `vee_session` 值 → 告诉 Claude：「更新 xcmo token: \<粘贴你的 token\>」。Claude 会写入 `~/.claude/memory/xcmo-session.json`。
+6 路并行 WebSearch → 筛 5-8 条具体可证实的热点 → 每条配 1-2 个数字角色 → 推飞书群。
 
-**输出位置**：`~/Desktop/xcmo-batches/<YYYYMMDD>/`
+**定时执行**：
+
+```
+/schedule create "0 1 * * *" "run skill ops-skills:us-trend-scout"
+```
+
+UTC 01:00 = 北京 09:00。
+
+---
+
+## xcmo-mobile 用法
+
+```
+触发：跟 Claude 说
+  下载 luyuyue@liao.com 2026-05-22 的内容
+  拉 luyuyue@liao.com 2026-05-21~2026-05-22 的素材
+  luyuyue@liao.com 2026-05-22
+  mobile share luyuyue@liao.com 2026-05-22
+```
+
+Claude 会：
+1. 调 xcmo API 拉该用户在指定日期生成的全部 task
+2. 按 `character_id` 分组下载视频 + 缩略图
+3. 生成 HTML 站点（总览页 + 每人物一个详情页）
+4. 每个人物生成一张二维码
+5. 起本地 HTTP 服务器（默认端口 8080）
+6. 浏览器自动打开 `http://localhost:8080`
+7. 提示你**手机和电脑在同一 WiFi 下扫人物二维码**
+
+**手机扫码后能干啥**：
+- 看该人物当天的所有视频
+- 长按视频 → 存到相册（iOS）
+- 点 📋 复制文案/标签 → 切到抖音 App 粘贴 → 发布
+
+**输出位置**：`~/Desktop/xcmo-mobile/<邮箱>/<日期>/site/`
+
+**停服务**：终端 Ctrl+C。
 
 ---
 
@@ -94,14 +126,18 @@ ops-skills/
 │   ├── us-trend-scout/
 │   │   ├── SKILL.md
 │   │   ├── personas.yaml          # 默认 26 数字角色
-│   │   └── config.example.yaml    # webhook 配置模板
-│   └── xcmo-download/
+│   │   └── config.example.yaml    # webhook 模板
+│   └── xcmo-mobile/
 │       ├── SKILL.md
-│       └── download.py
-├── tests/                          # 27 个 pytest 单测
-├── .github/workflows/ci.yml        # 自动校验 + 测试
-├── bump-version.sh                 # 版本同步工具
-├── requirements.txt                # python-docx
+│       ├── mobile.py              # 核心脚本
+│       └── templates/             # HTML 模板
+│           ├── index.html
+│           ├── character.html
+│           └── style.css
+├── tests/                          # 31 个 pytest
+├── .github/workflows/ci.yml
+├── bump-version.sh
+├── requirements.txt                # qrcode + pillow
 ├── requirements-dev.txt
 ├── CHANGELOG.md
 ├── LICENSE                         # Apache 2.0
@@ -118,11 +154,11 @@ cd ops-skills
 pip install -r requirements-dev.txt
 pytest
 
-# 发新版（同步 plugin.json + marketplace.json 的 version）
-./bump-version.sh 3.0.1
-# 编辑 CHANGELOG.md
-git add -A && git commit -m "chore: release v3.0.1"
-git tag v3.0.1
+# 发新版
+./bump-version.sh 4.0.1
+$EDITOR CHANGELOG.md
+git add -A && git commit -m "chore: release v4.0.1"
+git tag v4.0.1
 git push && git push --tags
 ```
 
