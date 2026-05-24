@@ -4,6 +4,45 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [4.4.0] - 2026-05-24
+
+### Added
+
+- **`skills/tk-template-scout/render_briefing.py`** — 简报格式固化脚本。把 `scout_strict.py` 的 JSON 输出渲染成严格按用户原 spec 格式的简报文本。
+  - 用法：`python3 scout_strict.py ... | python3 render_briefing.py` 或 `render_briefing.py --json result.json`
+  - 强制 26 人按 `DISPLAY_ORDER` 固定顺序展示
+  - Persona 名格式 `Name (@handle)`、视频条目 `标题 | 点赞 | URL` 三段式
+  - 点赞中文化 `1.2万赞 / 3.5K赞 / 234赞`
+  - 0 命中 persona 仍显示 segment 标题 + 「(24h 内 0 命中)」
+  - 不带 emoji 分组、不带统计行、不带 ⚠️ low_heat 标、不带"数据说明"段
+- **`tests/test_render_briefing.py`** — 29 个单测覆盖：fmt_likes / clean_title / capitalize_persona / format_briefing / 日期映射 / 26 人顺序 / 装饰物排除
+
+### Changed
+
+- **数据源默认从 `both` 改回 `search`**（贴用户原 spec：「按关键词在 TikTok 搜索过去 24h」）
+  - `scout_strict.py --source` 默认值 `both` → `search`
+  - 想用 hashtag / both 须显式指定 `--source hashtag` 或 `--source both`
+  - 实测 search 单源 24h 内 23/26 persona 命中、134 候选、4 分钟完成；hashtag/双源仍作为可选数据源保留
+- **SKILL.md 重写"输出格式"段 + Step 6 拼简报**：删掉所有 Claude 即兴拼简报的格式描述，改成"调 render_briefing.py 拿成品输出，不要二次加工"。
+  - 原因：实测靠 Claude 读 SKILL.md 拼简报会反复偏离用户原 spec（emoji 分组、统计行、⚠️ 标记、"模板""仿拍"行被自动加上）。代码固化后下游不管谁调用都拿到 100% 一致格式
+- `.github/workflows/ci.yml`：`py_compile` 加 `render_briefing.py`
+
+### Why this matters
+
+3 次连续偏离用户原始需求：
+1. v4.3.0 严格 24h 模式默认走 hashtag 页（不是用户要的搜索页）
+2. v4.4.0 设计阶段我提议双源融合 → 用户拒绝，要求纯 search
+3. v4.3.x 跑出的简报被 Claude 加上 emoji 分组、统计行、⚠️ 等装饰
+
+修法：所有"格式 / 数据源"等可被 Claude 偏移的决策，**代码固化 + 单测覆盖**。
+SKILL.md 只描述"调什么脚本"，不描述"输出长什么样"。
+
+### Verified
+
+- 100 pytest passed（43 旧 + 28 scout_strict + 29 render_briefing）
+- 端到端跑 `scout_strict --source search` 78/78 抓取 0 errors，4 分钟完成
+- `render_briefing.py --json result.json` 输出贴用户 spec 格式，0 装饰物
+
 ## [4.3.1] - 2026-05-24
 
 ### Changed

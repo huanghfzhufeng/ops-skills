@@ -83,7 +83,8 @@ class TestCrossPersonaDedup:
     def _make(self, persona: str, video_id: str, ts_offset: int = 0) -> scout_strict.VideoCandidate:
         return scout_strict.VideoCandidate(
             persona=persona,
-            hashtag="dummy",
+            keyword="dummy",
+            source="hashtag",
             url=f"https://www.tiktok.com/@u/video/{video_id}",
             video_id=video_id,
             timestamp=1_780_000_000 + ts_offset,
@@ -152,12 +153,12 @@ class TestBuildReport:
         return scout_strict.VideoRecord(
             url=url, title="t", uploader="u",
             like_count=like_count, view_count=like_count * 10,
-            comment_count=0, timestamp=1_780_000_000,
+            comment_count=0, timestamp=1_780_000_000, source="hashtag",
         )
 
     def _cand(self, video_id: str) -> scout_strict.VideoCandidate:
         return scout_strict.VideoCandidate(
-            persona="p", hashtag="h",
+            persona="p", keyword="k", source="hashtag",
             url=f"https://www.tiktok.com/@u/video/{video_id}",
             video_id=video_id, timestamp=1_780_000_000, age_hours=1.0,
         )
@@ -239,6 +240,43 @@ class TestLoadNetscapeCookies:
         cookies = scout_strict.load_netscape_cookies(f)
         assert len(cookies) == 1
         assert cookies[0]["name"] == "sessionid"
+
+
+# ---------- build_urls（双源融合）----------
+
+
+class TestBuildUrls:
+    def test_search_mode_only_search_url(self) -> None:
+        urls = scout_strict.build_urls("high fashion", "highfashion", "search")
+        assert len(urls) == 1
+        src, u = urls[0]
+        assert src == "search"
+        assert "search/video?q=high%20fashion" in u
+        assert "publish_time=1" in u
+        assert "sort_type=2" in u
+
+    def test_hashtag_mode_only_hashtag_url(self) -> None:
+        urls = scout_strict.build_urls("high fashion", "highfashion", "hashtag")
+        assert len(urls) == 1
+        src, u = urls[0]
+        assert src == "hashtag"
+        assert u == "https://www.tiktok.com/tag/highfashion"
+
+    def test_both_mode_returns_two_urls(self) -> None:
+        urls = scout_strict.build_urls("high fashion", "highfashion", "both")
+        assert len(urls) == 2
+        sources = {s for s, _ in urls}
+        assert sources == {"search", "hashtag"}
+
+    def test_invalid_source_raises(self) -> None:
+        import pytest as _pytest
+        with _pytest.raises(ValueError):
+            scout_strict.build_urls("x", "x", "bogus")
+
+    def test_keyword_space_encoded_only_in_search(self) -> None:
+        urls = dict(scout_strict.build_urls("data science life", "datasciencelife", "both"))
+        assert "data%20science%20life" in urls["search"]
+        assert urls["hashtag"].endswith("/tag/datasciencelife")
 
 
 # ---------- ID 解码（snowflake 假设） ----------

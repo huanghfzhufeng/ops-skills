@@ -83,5 +83,5 @@ jobs:
           python-version: '3.11'
           cache: pip
       - run: pip install -r requirements-dev.txt
-      - run: python3 -m py_compile skills/xcmo-mobile/mobile.py skills/tk-template-scout/scout.py skills/tk-template-scout/scout_strict.py
+      - run: python3 -m py_compile skills/xcmo-mobile/mobile.py skills/tk-template-scout/scout.py skills/tk-template-scout/scout_strict.py skills/tk-template-scout/render_briefing.py
       - run: pytest -v -m unit
