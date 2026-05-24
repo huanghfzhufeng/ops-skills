@@ -6,3 +6,9 @@ pytest>=7.0.0
 # 运行依赖（xcmo-mobile 用）
 qrcode>=7.0
 pillow>=10.0
+
+# tk-template-scout 用（CI 跑单测需要 import scout_strict 不挂）
+# 注：单测都是纯函数（keyword_to_hashtag / dedup / build_report 等），不启动
+# chromium，所以装 pip 包就够，不需要跑 `playwright install chromium`
+PyYAML>=6.0
+playwright>=1.40
