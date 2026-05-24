@@ -4,6 +4,71 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [4.3.1] - 2026-05-24
+
+### Changed
+
+按用户最新人设分组优化 `tk_keywords.yaml` 的 26 人关键词。分组只在 yaml 注释里说明，scout 仍按 26 人扁平结构跑（用户明确不需要分组功能，避免过度设计）。
+
+**上班账号（6 人，高质量内容输出 + 欧美时尚 / F1 / 科技事件方向）：**
+
+- `avery`: `clean girl routine / LA lifestyle / healthy eating` → `womensfashion / europeanstreetstyle / f1fashion`
+- `spencer`: `productivity tools / quiet life / optimizer` → `mensfashion / corporatestyle / f1paddock`
+- `ava`: `beauty review / makeup tutorial / PR unboxing` → `highfashion / couture / fashionweek`
+- `mia`: `tech review / app recommendation / growth tools` → `workingmom / worklifebalance / momlife`
+- `ro`: `life hacks / unboxing tech / PM productivity` → `techworker / siliconvalley / technews`
+- `ryan`: `meal prep / protein diet / engineer gym` → `softwareengineer / techindustry / developerlife`
+
+**养号账号（20 人，按各自新标签调整）：**
+
+- `caden / mason / eleanor` 近原配置，微调
+- `jade` 心理 → editorial fashion 高级时尚
+- `emma` 书单 → healthy cooking 健康饮食
+- `nari` ABG → gen z fashion 年轻潮流
+- `joey` 橄榄球 nutrition → high school sports 体育幽默
+- `kai` 加 NYC college
+- `jesse` cinematic → indie / vintage 文艺时尚
+- `sophie` heiress → art gallery 艺术圈
+- `ezra` men fashion → corporate humor 职场幽默
+- `riley` 微调
+- `clara` nurse → korean fashion 韩系
+- `leila` pilates → trad wife 家居
+- `max` walking → gym humor 健身幽默
+- `charlotte` AI tools → tech girl + ai beauty 科技美妆
+- `priya` data science → tech wellness 科技健康
+- `iris` 删 work drama 加 career girl
+- `leo` emotional → gym tok 健身
+- `silver` 用户未提及，保留原 NYC PR girl 配置
+
+### Verified
+
+跑 `scout_strict.py` 端到端验证新关键词命中率：
+
+- 78/78 hashtag 抓取 0 errors，5790 raw URL
+- 315 候选 → 314 yt-dlp 元数据补全（99.7%）
+- 26/26 persona 拿到 Top 3
+- ID 解码 5/5 sample 全过
+- cross-persona dedup 解决 6 个冲突
+- 耗时 5.5 分钟
+
+**新关键词命中爆款样本（24h 内）：**
+
+- `emma` healthycooking 20.8 万赞
+- `joey` footballhumor 5.7 万赞
+- `max` gymhumor 4 万赞
+- `avery` womensfashion 3.3 万赞
+
+**3 个 persona 命中率偏低（已知）：**
+
+- `leila` 301 赞（trad wife 赛道 24h 真没爆款，正常现象）
+- `silver` 376 赞（用户未提，保留原配置）
+- `priya` 118 赞 + 只 2 候选（`techwellness / datasciencelife` 太冷门）→ 下一版可试 `datascience / wellnesstech` 更地道
+
+### Not done (explicit decision)
+
+- **"上班 / 养号"分组功能**：用户明确说不需要，避免过度设计。yaml 注释里说明分组就够了。
+- **"事件订阅"功能**（F1 / 文化时尚 / 科技 / 教育事件触发推送）：等用户立项再做（属于 us-trend-scout v2 方向）。
+
 ## [4.3.0] - 2026-05-24
 
 ### Added

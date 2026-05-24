@@ -1,159 +1,199 @@
 # 26 个数字角色的 TikTok 搜索关键词
 # key 必须与 us-trend-scout/personas.yaml 的 key 一致
-# 每个角色 3 个英文关键词，按"赛道核心 + 人设场景 + 模板风格"的思路给
+# 每人 3 个英文短语，自动转 hashtag（空格删掉小写）
+#
+# v4.3.1 起按用户调整后的"上班账号 / 养号账号"分组重整关键词。
+# 注：分组只是注释里说明，scout_strict.py 仍按 26 人扁平结构跑。
+# 真要让 scout 按 tier 触发不同行为，需要加 tier 字段 + 改 load_keywords，
+# 等"事件订阅"功能正式立项再做。
 
-sophie:
+# ─────────────────────────────────────────────────────────
+# 上班账号（6 人）：高质量内容输出 + 关心欧美时尚 / F1 / 科技事件
+# ─────────────────────────────────────────────────────────
+
+avery:
+  # 时尚、女性 + F1 / 欧美文化时尚大事件
   keywords:
-    - "old money outfit"
-    - "quiet luxury"
-    - "skincare routine heiress"
+    - "womens fashion"
+    - "european street style"
+    - "f1 fashion"
+
+spencer:
+  # 工作、男性时尚 + F1 / 欧美文化时尚大事件
+  keywords:
+    - "mens fashion"
+    - "corporate style"
+    - "f1 paddock"
 
 ava:
+  # 高级时尚 + F1 / 欧美文化时尚大事件
   keywords:
-    - "beauty review"
-    - "makeup tutorial"
-    - "PR unboxing"
+    - "high fashion"
+    - "couture"
+    - "fashion week"
+
+mia:
+  # 女性职场、宝妈、work life balance + 美国年轻妈妈关注的教育 / 社会文化
+  keywords:
+    - "working mom"
+    - "work life balance"
+    - "mom life"
+
+ro:
+  # 科技、工作 + 美国科技界事件（上班 + 养号双重身份）
+  keywords:
+    - "tech worker"
+    - "silicon valley"
+    - "tech news"
+
+ryan:
+  # 工作 + 美国科技界事件
+  keywords:
+    - "software engineer"
+    - "tech industry"
+    - "developer life"
+
+
+# ─────────────────────────────────────────────────────────
+# 养号账号（20 人，按各自标签出关键词）
+# ─────────────────────────────────────────────────────────
+
+caden:
+  # 幽默、高中生活（碎嘴段子型，和 joey 区分）
+  keywords:
+    - "high school funny"
+    - "teen humor"
+    - "pov humor"
+
+mason:
+  # 海边
+  keywords:
+    - "coastal aesthetic"
+    - "beach vibes"
+    - "summer beach"
+
+jade:
+  # 高级时尚（和 ava 区分：jade 走 editorial / 街拍角度）
+  keywords:
+    - "editorial fashion"
+    - "luxury aesthetic"
+    - "fashion editorial"
+
+emma:
+  # 健康饮食、做菜
+  keywords:
+    - "healthy cooking"
+    - "clean eating"
+    - "easy recipes"
+
+nari:
+  # 年轻时尚潮流
+  keywords:
+    - "gen z fashion"
+    - "y2k outfit"
+    - "trendy ootd"
+
+joey:
+  # 幽默、高中生活（运动型，橄榄球队长 + 队友 banter，和 caden 区分）
+  keywords:
+    - "football humor"
+    - "athlete life"
+    - "high school sports"
+
+kai:
+  # 艺术、大学生活、纽约生活
+  keywords:
+    - "art student"
+    - "nyc college"
+    - "creative vlog"
+
+jesse:
+  # 文艺、时尚
+  keywords:
+    - "indie aesthetic"
+    - "vintage fashion"
+    - "film aesthetic"
+
+sophie:
+  # 精致女孩、艺术界
+  keywords:
+    - "quiet luxury"
+    - "art gallery"
+    - "gallery girl"
 
 ezra:
+  # 职场幽默、工作
   keywords:
-    - "men fashion"
-    - "style tips"
-    - "streetwear"
+    - "corporate humor"
+    - "office life"
+    - "9 to 5"
 
 riley:
+  # 纽约生活、古着时尚、gen z
   keywords:
-    - "vintage thrift"
-    - "Brooklyn style"
-    - "secondhand fashion"
+    - "nyc vintage"
+    - "brooklyn style"
+    - "thrift haul"
+
+clara:
+  # 韩系时尚
+  keywords:
+    - "korean fashion"
+    - "k beauty"
+    - "seoul style"
+
+leila:
+  # 家居、trad wife
+  keywords:
+    - "trad wife"
+    - "home decor"
+    - "homemaking"
+
+max:
+  # 健身、幽默
+  keywords:
+    - "gym humor"
+    - "fitness funny"
+    - "workout meme"
+
+charlotte:
+  # 科技、美妆
+  keywords:
+    - "tech girl"
+    - "ai beauty"
+    - "productivity aesthetic"
+
+priya:
+  # 科技、健康
+  keywords:
+    - "tech wellness"
+    - "data science life"
+    - "health tech"
 
 silver:
+  # 用户未在上班 / 养号分组提及，暂保留原 NYC PR girl 标签
   keywords:
     - "NYC it girl"
     - "Manhattan aesthetic"
     - "PR girl life"
 
-nari:
-  keywords:
-    - "ABG makeup"
-    - "day to night look"
-    - "cute outfits"
-
-clara:
-  keywords:
-    - "ingredient check"
-    - "nurse health tips"
-    - "clean label"
-
-leila:
-  keywords:
-    - "pilates routine"
-    - "gentle workout"
-    - "mom fitness"
-
-ryan:
-  keywords:
-    - "meal prep"
-    - "protein diet"
-    - "gym routine engineer"
-
-max:
-  keywords:
-    - "healthy lifestyle"
-    - "walking routine"
-    - "simple health"
-
-avery:
-  keywords:
-    - "clean girl routine"
-    - "LA lifestyle"
-    - "healthy eating"
-
-joey:
-  keywords:
-    - "football nutrition"
-    - "high protein"
-    - "sports diet"
-
-mia:
-  keywords:
-    - "tech review"
-    - "app recommendation"
-    - "growth tools"
-
-charlotte:
-  keywords:
-    - "AI tools"
-    - "productivity apps"
-    - "workflow hacks"
-
-priya:
-  keywords:
-    - "data science"
-    - "hot take tech"
-    - "app deep dive"
-
-ro:
-  keywords:
-    - "life hacks"
-    - "unboxing tech"
-    - "PM productivity"
-
-spencer:
-  keywords:
-    - "productivity tools"
-    - "quiet life"
-    - "optimizer"
-
-caden:
-  keywords:
-    - "relatable comedy"
-    - "high school funny"
-    - "POV humor"
-
-mason:
-  keywords:
-    - "coastal aesthetic"
-    - "beach vibes"
-    - "quiet boy"
-
-kai:
-  keywords:
-    - "art student"
-    - "creative process"
-    - "visual aesthetic"
-
-jesse:
-  keywords:
-    - "cinematic TikTok"
-    - "film student"
-    - "micro drama"
-
-emma:
-  keywords:
-    - "book recommendation"
-    - "reading list"
-    - "bookworm"
-
-jade:
-  keywords:
-    - "mental health tips"
-    - "therapy insight"
-    - "self care"
-
 eleanor:
+  # 大学姐妹会、时尚、女性
   keywords:
     - "sorority life"
     - "college girl"
     - "campus aesthetic"
 
 iris:
+  # 女性职场
   keywords:
     - "corporate girlhood"
-    - "work drama"
     - "office humor"
+    - "career girl"
 
 leo:
+  # 健身
   keywords:
-    - "emotional content"
-    - "Asian guy thoughts"
-    - "relatable"
+    - "gym tok"
+    - "fitness motivation"
+    - "workout aesthetic"
