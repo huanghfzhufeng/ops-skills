@@ -17,21 +17,36 @@
 
 ## 安装
 
-### 方式 1：Desktop App 用户（最简）
+### 一键安装（推荐，**5 分钟**搞定全部依赖 + cookies）
 
-打开 **Mac 终端**（⌘+Space 搜「终端」回车），粘贴这一段：
+打开 **Mac 终端**（⌘+Space 搜「终端」回车），粘贴：
 
 ```bash
-git clone https://github.com/huanghfzhufeng/ops-skills.git /tmp/ops-skills && \
-mkdir -p ~/.claude/skills && \
-cp -r /tmp/ops-skills/skills/* ~/.claude/skills/ && \
-pip3 install --user --break-system-packages qrcode pillow 2>/dev/null; \
-echo "✅ 装好，请完全退出 Claude Desktop App（⌘+Q）再打开"
+git clone https://github.com/huanghfzhufeng/ops-skills.git ~/ops-skills
+cd ~/ops-skills
+bash setup.sh
 ```
 
-跑完**完全退出 Claude Desktop App**（⌘+Q）再打开。
+`setup.sh` 会自动：
 
-### 方式 2：Claude Code CLI 用户
+1. 检测平台 / Python / Chrome 是否就绪
+2. 装 `yt-dlp`（Homebrew or pip）
+3. 装 Python 依赖：`qrcode pillow PyYAML playwright playwright-stealth`
+4. 装 Playwright chromium（约 200MB 一次性下载）
+5. 引导你从 Chrome 导出 TikTok cookies 到 `/tmp/tiktok-cookies.txt`（**严格 24h 模式必须**）
+
+跑完会提示你"在 Claude 说『跑一次 TK 模板』即可"。
+
+### 然后让 Claude 看到这些 skill
+
+**Desktop App 用户**：
+
+```bash
+mkdir -p ~/.claude/skills && cp -r ~/ops-skills/skills/* ~/.claude/skills/
+# 完全退出 Claude Desktop（⌘+Q）再打开
+```
+
+**Claude Code CLI 用户**：
 
 ```
 /plugin marketplace add huanghfzhufeng/ops-skills
@@ -40,14 +55,43 @@ echo "✅ 装好，请完全退出 Claude Desktop App（⌘+Q）再打开"
 
 享受标准 plugin 系统（版本管理 + `/plugin upgrade`）。
 
-### Python 依赖
+### 平台支持
+
+| 平台 | 支持度 | 备注 |
+|---|---|---|
+| **macOS**（Apple Silicon / Intel） | ✅ 100% | 主开发平台 |
+| **Linux** | ⚠️ 部分 | Chrome cookies 解密依赖 Chrome 装在标准位置 |
+| **Windows** | ❌ 未测 | 建议用 WSL2 跑 Linux 模式 |
+
+### 依赖明细（如果你不用 setup.sh 想自己装）
 
 ```bash
-pip3 install qrcode pillow              # xcmo-mobile 用
-brew install yt-dlp                     # tk-template-scout 用（也可 pip install yt-dlp）
+# 通用工具
+brew install yt-dlp                                              # tk-template-scout 抓 TikTok 元数据
+# 或 pip3 install --user --break-system-packages yt-dlp
+
+# Python 包
+pip3 install --user --break-system-packages \
+  qrcode pillow PyYAML playwright playwright-stealth
+
+# Playwright headless Chrome（200MB 一次性）
+playwright install chromium
+
+# 必须：Chrome 真登录 tiktok.com 后导出 cookies
+yt-dlp --cookies-from-browser chrome --cookies /tmp/tiktok-cookies.txt \
+  --skip-download --quiet 'https://www.tiktok.com/@tiktok'
+
+# 验证 cookies 含 sessionid（真登录的标志）
+grep sessionid /tmp/tiktok-cookies.txt | grep tiktok.com
 ```
 
-us-trend-scout 全用 WebSearch + 标准库，无额外依赖。tk-template-scout 需要 yt-dlp + Chrome 已登录 tiktok.com（cookies 用于绕反风控）。
+**为什么 cookies 这步必须**：TikTok 搜索 / hashtag 页对未登录用户弹登录墙。脚本必须用你 Chrome 真登录账号的 sessionid 才能访问数据。如果你 Chrome 只是浏览过 TikTok 没登录，cookies 里没 sessionid，脚本会报错退出 + 给清楚提示。
+
+**Cookies 失效怎么办**（一般 7-30 天）：在 Chrome 重新登录 tiktok.com，然后：
+
+```bash
+rm /tmp/tiktok-cookies.txt && bash ~/ops-skills/setup.sh
+```
 
 ---
 
@@ -89,53 +133,73 @@ UTC 01:00 = 北京 09:00。
 
 ## tk-template-scout 用法
 
-两种模式按口令选：
-
-### MVP 模式（默认，便宜快）
-
 ```
-触发：跟 Claude 说「跑一次 TK 模板」/「TK 模板日推」/「tk-template-scout」
+触发：跟 Claude 说「跑一次 TK 模板」/「TK 模板日推」/「tk-template」
 ```
 
-26 人 × 3 词并行 WebSearch 拿 TikTok 视频 URL → yt-dlp + Chrome cookies 抓官方网页元数据 → 按 timestamp 过滤 24h（不足 3 条降级到 7 天）→ 按点赞排序每人取 Top 3 → 简报。
+**v4.4.0 默认走 search 单源**（贴用户原 spec：「按关键词在 TikTok 搜索过去 24h」）。
 
-**前置**：
-1. `brew install yt-dlp`（或 `pip install yt-dlp`）
-2. Chrome 登录过 `https://www.tiktok.com`（任意账号，cookies 用于绕反风控）
+### 数据流（5 步）
 
-**数据时效**：因为 Google 索引 TikTok 滞后，"过去 24h" 硬约束往往无法满足，多数会降级到 7d 或全量高赞。对"运营找模板做选题"够用。要真当天数据用下面的严格 24h 模式。
+1. 读 `tk_keywords.yaml`（26 人 × 3 关键词 = 78 个查询）
+2. Playwright headless Chrome 抓 `https://www.tiktok.com/search/video?q=<keyword>&publish_time=1&sort_type=2`（带你 Chrome cookies）
+3. 从视频 URL 提取 `video_id`，用 `timestamp = video_id >> 32`（snowflake 解码）做 24h 硬过滤
+4. yt-dlp 给筛剩的 URL 补 `like_count / title / uploader`
+5. 每 persona 按 like_count 取 Top 3 → `render_briefing.py` 渲染成简报（格式代码固化）
 
-### 严格 24h 模式（v4.3.0 新增，能拿到真当天数据）
+### 输出格式（render_briefing.py 强制）
 
 ```
-触发：跟 Claude 说「跑一次 TK 模板 严格 24h」/「tk 严格 24h」/「tk-template 严格模式」
+TK模板日推 | 5月24日（周日）
+
+Sophie (@sophie.fits2)
+
+The people who feel the most luxurious are rarely trying the hardest. | 9.6K赞 | https://www.tiktok.com/@iamshaniakhan/video/7643106369498909966
+#OldMoneyStyle #menswatches #watches #Menswear #QuietLuxury | 232赞 | https://www.tiktok.com/@jamesashford.london/video/7643131720560069910
+...
+
+Ava (@ava.glow3)
+
+(24h 内 0 命中)
+
+...（26 人按固定顺序展开）
 ```
 
-Playwright headless Chrome 抓 26 关键词对应的 TikTok hashtag 页 → 用 `video_id >> 32` snowflake 解码 timestamp 硬过滤 24h → yt-dlp 补点赞/标题 → cross-persona dedup → Top 3 + 低赞自动标注。
+### 性能
 
-**前置**（在 MVP 模式基础上多两步）：
+- 78 search query × Playwright 4 worker = **3 分钟**
+- 134 候选 × yt-dlp 6 并发 = **1-2 分钟**
+- 总耗时：**约 4-5 分钟**
+- 单次实测：26 人 23 人有数据 / 3 人 0 命中 / 最大爆款 23.6 万赞
+
+### 备用数据源（高级用户）
+
+如果默认 search 命中率不够，可以试 `hashtag` 单源或 `both` 双源（实测两源重叠仅 21%，是互补关系）：
 
 ```bash
-# 1) 装 Playwright + 拉 chromium（约 200MB，一次性）
-pip3 install -r ~/.claude/skills/tk-template-scout/requirements.txt
-playwright install chromium
+# 显式跑 hashtag 单源
+python3 skills/tk-template-scout/scout_strict.py --source hashtag --keywords ...
 
-# 2) Chrome 必须**真实登录** tiktok.com，然后手动导一次 cookies：
-yt-dlp --cookies-from-browser chrome --cookies /tmp/tiktok-cookies.txt \
-  --skip-download --quiet 'https://www.tiktok.com/@tiktok'
-# 检查 cookies 含 sessionid：
-grep -E '^\.tiktok\.com.*sessionid\s' /tmp/tiktok-cookies.txt
+# 双源融合
+python3 skills/tk-template-scout/scout_strict.py --source both --keywords ...
 ```
 
-**实测性能**：78 hashtag × 4 worker = Playwright 3 分钟 + yt-dlp 3 分钟 = **6 分钟**，26 人全部拿到 24h 内 Top 3。
+`scout_strict.py --help` 看完整参数。
 
-**已知限制**：cross-persona dedup 启发式不完美；ID 解码假设虽有 sample 验证但不是 100% 保险；关键词 → hashtag 自动转换粗暴。详见 `skills/tk-template-scout/SKILL.md` "关键限制" 段。
-
-### 定时执行（任一模式）
+### 定时执行
 
 ```
 /schedule create "0 1 * * *" "run skill ops-skills:tk-template-scout"
 ```
+
+UTC 01:00 = 北京 09:00。注意 cookies 7-30 天会失效，定时跑要监控失败邮件。
+
+### 已知限制
+
+- ID 解码假设虽有 sample 验证但不是 100% 保险（TikTok 改格式可能静默错）
+- Cross-persona dedup 是启发式（"候选最少 persona 优先"），不是精确归属
+- 关键词太长（5+ 词）命中率差，建议改简短关键词（如 `data science` 比 `data science life` 更地道）
+- TikTok 反爬随时可能升级 → 心里要有 1-2 个月修一次脚本的预期
 
 ---
 
@@ -183,8 +247,9 @@ ops-skills/
 │   ├── tk-template-scout/
 │   │   ├── SKILL.md
 │   │   ├── tk_keywords.yaml       # 26 人各 3 个 TikTok 搜索关键词
-│   │   ├── scout.py               # MVP 模式：WebSearch + yt-dlp
-│   │   ├── scout_strict.py        # 严格 24h 模式：Playwright + hashtag + ID 解码
+│   │   ├── scout.py               # 旧 MVP 模式：WebSearch + yt-dlp
+│   │   ├── scout_strict.py        # 主路径：Playwright search 24h + ID 解码 + yt-dlp 补点赞
+│   │   ├── render_briefing.py     # 简报格式固化渲染（代码级强制，防 Claude 即兴拼）
 │   │   └── requirements.txt       # PyYAML + playwright + playwright-stealth
 │   └── xcmo-mobile/
 │       ├── SKILL.md
@@ -193,9 +258,10 @@ ops-skills/
 │           ├── index.html
 │           ├── character.html
 │           └── style.css
-├── tests/                          # 31 个 pytest
+├── tests/                          # 100 个 pytest（unit）
 ├── .github/workflows/ci.yml
 ├── bump-version.sh
+├── setup.sh                        # 一键安装脚本（依赖 + cookies）
 ├── requirements.txt                # qrcode + pillow
 ├── requirements-dev.txt
 ├── CHANGELOG.md

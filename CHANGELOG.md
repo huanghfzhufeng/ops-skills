@@ -4,6 +4,45 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [4.4.1] - 2026-05-24
+
+### Added
+
+- **`setup.sh`** 一键安装脚本。`bash setup.sh` 6 步搞定全部依赖：
+  1. 平台检测（macOS 完整支持 / Linux 部分 / Windows 不支持）
+  2. Python 3.10+ 检测
+  3. Chrome 检测（macOS 检 `/Applications/Google Chrome.app`）
+  4. 装 yt-dlp（Homebrew 优先，fallback pip）
+  5. 装 Python 依赖：qrcode pillow PyYAML playwright playwright-stealth
+  6. 装 Playwright chromium（~200MB）
+  7. 引导用户手动登录 TikTok + 自动导出 cookies + 验证含 sessionid
+
+### Changed
+
+- **README 重写"安装"段**：
+  - 头条改成"一键安装"（`bash setup.sh`）
+  - 加完整依赖明细（之前漏 PyYAML / playwright / playwright-stealth / chromium）
+  - 加"首次配置 TikTok cookies"教程（之前完全没提，新用户必踩坑）
+  - 加平台支持矩阵（macOS ✅ / Linux ⚠️ / Windows ❌）
+  - 加 cookies 失效处理（一句 `rm + bash setup.sh` 重跑）
+- **README tk-template-scout 用法段**重写到 v4.4.0：
+  - 删除已被 v4.4.0 移除的"两种模式"描述（MVP / 严格 24h 不再并列）
+  - 改成"默认 search 单源 + 备用 hashtag/both（高级用户）"
+  - 加 render_briefing.py 输出格式示例（贴用户原 spec）
+  - 加性能数据（4-5 分钟 / 23/26 命中）
+  - 加 4 条已知限制
+- **README 仓库结构图**加 `setup.sh` 和 `render_briefing.py`
+
+### Why this matters
+
+打包给非技术运营 / 同事用之前，README 漏 5 个坑（依赖、cookies、登录态、用法过时、跨平台），首次跑会卡 1-2 小时。setup.sh 把所有自动化的步骤封装，对方只需要：
+
+```
+git clone ... && bash setup.sh
+```
+
+5 分钟搞定（其中 200MB chromium 下载占 2-3 分钟）。
+
 ## [4.4.0] - 2026-05-24
 
 ### Added
