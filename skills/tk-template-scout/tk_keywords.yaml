@@ -1,0 +1,159 @@
+# 26 个数字角色的 TikTok 搜索关键词
+# key 必须与 us-trend-scout/personas.yaml 的 key 一致
+# 每个角色 3 个英文关键词，按"赛道核心 + 人设场景 + 模板风格"的思路给
+
+sophie:
+  keywords:
+    - "old money outfit"
+    - "quiet luxury"
+    - "skincare routine heiress"
+
+ava:
+  keywords:
+    - "beauty review"
+    - "makeup tutorial"
+    - "PR unboxing"
+
+ezra:
+  keywords:
+    - "men fashion"
+    - "style tips"
+    - "streetwear"
+
+riley:
+  keywords:
+    - "vintage thrift"
+    - "Brooklyn style"
+    - "secondhand fashion"
+
+silver:
+  keywords:
+    - "NYC it girl"
+    - "Manhattan aesthetic"
+    - "PR girl life"
+
+nari:
+  keywords:
+    - "ABG makeup"
+    - "day to night look"
+    - "cute outfits"
+
+clara:
+  keywords:
+    - "ingredient check"
+    - "nurse health tips"
+    - "clean label"
+
+leila:
+  keywords:
+    - "pilates routine"
+    - "gentle workout"
+    - "mom fitness"
+
+ryan:
+  keywords:
+    - "meal prep"
+    - "protein diet"
+    - "gym routine engineer"
+
+max:
+  keywords:
+    - "healthy lifestyle"
+    - "walking routine"
+    - "simple health"
+
+avery:
+  keywords:
+    - "clean girl routine"
+    - "LA lifestyle"
+    - "healthy eating"
+
+joey:
+  keywords:
+    - "football nutrition"
+    - "high protein"
+    - "sports diet"
+
+mia:
+  keywords:
+    - "tech review"
+    - "app recommendation"
+    - "growth tools"
+
+charlotte:
+  keywords:
+    - "AI tools"
+    - "productivity apps"
+    - "workflow hacks"
+
+priya:
+  keywords:
+    - "data science"
+    - "hot take tech"
+    - "app deep dive"
+
+ro:
+  keywords:
+    - "life hacks"
+    - "unboxing tech"
+    - "PM productivity"
+
+spencer:
+  keywords:
+    - "productivity tools"
+    - "quiet life"
+    - "optimizer"
+
+caden:
+  keywords:
+    - "relatable comedy"
+    - "high school funny"
+    - "POV humor"
+
+mason:
+  keywords:
+    - "coastal aesthetic"
+    - "beach vibes"
+    - "quiet boy"
+
+kai:
+  keywords:
+    - "art student"
+    - "creative process"
+    - "visual aesthetic"
+
+jesse:
+  keywords:
+    - "cinematic TikTok"
+    - "film student"
+    - "micro drama"
+
+emma:
+  keywords:
+    - "book recommendation"
+    - "reading list"
+    - "bookworm"
+
+jade:
+  keywords:
+    - "mental health tips"
+    - "therapy insight"
+    - "self care"
+
+eleanor:
+  keywords:
+    - "sorority life"
+    - "college girl"
+    - "campus aesthetic"
+
+iris:
+  keywords:
+    - "corporate girlhood"
+    - "work drama"
+    - "office humor"
+
+leo:
+  keywords:
+    - "emotional content"
+    - "Asian guy thoughts"
+    - "relatable"

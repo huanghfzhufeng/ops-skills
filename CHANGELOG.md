@@ -4,6 +4,70 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [4.3.0] - 2026-05-24
+
+### Added
+
+- **tk-template-scout 严格 24h 模式**（解决 MVP 模式拿不到真当天数据的痛点）：
+  - `skills/tk-template-scout/scout_strict.py`：Playwright 抓 TikTok hashtag 页 + `video_id >> 32` snowflake 解码 timestamp 硬过滤 24h + yt-dlp 补点赞 / 标题 / uploader
+  - SKILL.md 加"选择模式"段 + 完整"严格 24h 模式"小节：触发词 / 命令 / 输出结构 / 简报特殊规则 / 关键限制诚实标注
+  - `requirements.txt` 加 `playwright>=1.40` + `playwright-stealth>=2.0`
+  - 用户首次跑前需 `pip install -r requirements.txt && playwright install chromium`（约 200MB）
+- **触发词**：用户说"跑一次 TK 模板 严格 24h" / "tk 严格 24h" / "tk-template 严格模式" 启用
+- `tests/test_scout_strict.py`：23 个 pytest unit 测试（纯函数无 I/O），覆盖 keyword_to_hashtag / check_cookies_have_session / cross_persona_dedup / build_report / load_netscape_cookies / ID 解码数学
+
+### Technical decisions
+
+- **走 TikTok hashtag 页（`/tag/<hashtag>`）而非 search 页**：实测 `/search?publish_time=1` filter 是 hint 不是硬约束，会混入旧高相关性视频；hashtag 页按时间倒序更可靠。78 hashtag 跑出来 26 人全部拿到 24h 内真实数据。
+- **Video ID snowflake 解码**：`timestamp = video_id >> 32` 是 TikTok ID 高 32 位编码 unix 秒。比 yt-dlp 抓 timestamp 快 100 倍（无网络请求），秒级精度。同时加 sample 二次验证（`verify_id_decoding_sample`）：抽 5 个 sample 走 yt-dlp 拿真 timestamp，差异 > 1h 报警，超过半数 mismatch 强警告。
+- **Cross-persona dedup**：同视频被多 persona 抓到时归给候选数最少的（让冷门赛道优先获得素材）。简报里不会出现"三个不同人设推荐同一个视频"的尴尬。
+- **Browser context 复用**：4 worker × 1 context（不是 78 次新建 context），跑 78 hashtag 从 6 分钟降到 3 分钟。
+- **Stealth 双层兜底**：playwright-stealth 可用就用，不可用也跑基础 init script（`navigator.webdriver` / `plugins` / `languages`）。
+- **零自动导 cookies**：探针 URL 会过期导致首次跑挂，改成明确报错 + 提示用户手动跑 `yt-dlp --cookies-from-browser chrome --cookies /tmp/tiktok-cookies.txt --skip-download 'https://www.tiktok.com/@tiktok'`。
+- **检测 cookies 是否真登录**：load 后查 `sessionid` 是否在 `.tiktok.com` domain 下，不在就报错（用户的 Chrome 必须真登录 TikTok，不只是浏览过）。
+- **检测 cookies 失效**：所有 78 hashtag raw URL 总和为 0 → 登录墙诊断 + 退出码 3。
+- **保留"凑 Top 3"行为 + 自动标低赞**：`--min-likes-warn 500`（可配），Top1 < 阈值的 persona 在 JSON 里标 `low_heat_warning: true`，简报输出层要明示"24h 内无爆款"。
+
+### Changed
+
+- `plugin.json` + `marketplace.json` description 加严格 24h 模式描述
+- `README.md`：tk-template-scout 用法段加严格模式触发 + 前置；仓库结构图加 `scout_strict.py` / `test_scout_strict.py`
+- `.github/workflows/ci.yml`：`py_compile` 路径加 `skills/tk-template-scout/scout_strict.py`
+
+### Known limitations (诚实标在 SKILL.md 里)
+
+- ID 解码假设 `timestamp = video_id >> 32` 没真正二次验证生产环境长期稳定性，万一 TikTok 改 ID 格式可能静默错（已加 sample 验证 + warning 缓解，但不是 100% 保险）。
+- Cross-persona dedup 是"候选数最少优先"的启发式，不是完美方案。
+- 关键词 → hashtag 自动转换粗暴（空格删掉小写），5+ 词的关键词（如 `skincare routine heiress`）常 0 命中。
+
+## [4.2.0] - 2026-05-22
+
+### Added
+
+- **新 skill `tk-template-scout`** — 26 人 × 3 词 TikTok 真实视频搜索 + 点赞排序 + Top 3 模板供运营仿拍：
+  - `skills/tk-template-scout/SKILL.md`：触发词、8 步工作流、输出格式、文体约束、`/schedule` 集成
+  - `skills/tk-template-scout/tk_keywords.yaml`：26 个 persona 各 3 个英文搜索关键词，按"赛道核心 + 人设场景 + 模板风格"配
+  - `skills/tk-template-scout/scout.py`：核心抓取脚本，并行调 yt-dlp + `--cookies-from-browser chrome` 抓 TikTok 视频元数据，按 timestamp 过滤 24h（不足 3 条降级到 7 天再降级到全量），按 like_count 排序取 Top 3
+  - `skills/tk-template-scout/requirements.txt`：PyYAML 依赖
+
+### Technical decisions
+
+- **数据源走 yt-dlp + Chrome cookies**（非第三方付费 API）：yt-dlp 抓的是 TikTok 官方网页 SSR 数据，等同浏览器访问。Mac 上 `--cookies-from-browser chrome` 自动读已登录 cookies 绕反风控，单视频抓取实测 100% 成功率。
+- **WebSearch → URL 收集 → yt-dlp 抓详情** 的两阶段架构：因为 TikTok tag/搜索页直接 yt-dlp 抓需要 mobile API（`app_info`），但单视频 URL 抓没问题。WebSearch `site:tiktok.com <keyword>` 拿 URL 是稳定路径。
+- **数据时效降级**：Google 索引 TikTok 视频比发布晚几天到几周，「过去 24h」硬约束往往无法满足。脚本自动降级到 7d → 全量高赞并在简报里标注 `age_tag`。对运营找模板做选题够用。
+- **接口层抽象** `scout.py::fetch_metadata`：未来要严格实时 24h，加 Playwright fallback 跑 TikTok 搜索页（带 publish_time filter），代价是装 chromium ~200MB。
+- **复用 us-trend-scout 的 personas.yaml**：单一数据源，新 skill 只新增 `tk_keywords.yaml` 关键词文件。
+- **飞书 webhook 复用 `~/.config/ops-skills/tk-template-scout.yaml`**：与 us-trend-scout 解耦，未来 us-trend-scout 恢复推送时互不影响。
+
+### Fixed
+
+- `.github/workflows/ci.yml` 里 `py_compile skills/xcmo-download/download.py` 引用了 v4.0.0 已重命名的旧路径。改成 `skills/xcmo-mobile/mobile.py skills/tk-template-scout/scout.py`。
+
+### Changed
+
+- `plugin.json` + `marketplace.json` description 加 tk-template-scout 段
+- `README.md`：Skill 表格加一行 / 用户配置表加三行 / 加 tk-template-scout 用法段 / 仓库结构图同步
+
 ## [4.1.0] - 2026-05-22
 
 ### Removed (Breaking — 但用户主动要求)
