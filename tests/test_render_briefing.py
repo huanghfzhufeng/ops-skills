@@ -137,7 +137,7 @@ class TestFormatBriefing:
         data = {"personas": {}}
         result = render_briefing.format_briefing(data, sample_personas, today=fixed_date)
         assert "Sophie (@sophie.fits2)" in result
-        assert "(24h 内 0 命中)" in result
+        assert "(24h 内 0 命中 ≤15s 模板)" in result
 
     def test_persona_with_videos_shows_three_lines(self, sample_personas, fixed_date) -> None:
         data = {
@@ -227,6 +227,74 @@ class TestFormatBriefing:
         assert "测试中文标题 | 1.0K赞 | https://x" in result
         assert "→ Sophie 拍策展女孩在画廊门口的 outfit" in result
 
+    def test_duration_shown_after_likes(self, sample_personas, fixed_date) -> None:
+        """v4.6.0：视频时长在点赞数后用 | 分隔显示"""
+        data = {
+            "personas": {
+                "sophie": {
+                    "videos": [
+                        {"title_cn": "测试", "like_count": 1000, "url": "https://x", "duration": 12},
+                    ],
+                },
+            },
+        }
+        result = render_briefing.format_briefing(data, sample_personas, today=fixed_date)
+        assert "测试 | 1.0K赞 | 12s | https://x" in result
+
+    def test_no_duration_no_extra_pipe(self, sample_personas, fixed_date) -> None:
+        """duration 缺失或 0 时不显示，也不留多余 | 分隔"""
+        data = {
+            "personas": {
+                "sophie": {
+                    "videos": [
+                        {"title_cn": "测试", "like_count": 1000, "url": "https://x"},
+                    ],
+                },
+            },
+        }
+        result = render_briefing.format_briefing(data, sample_personas, today=fixed_date)
+        assert "测试 | 1.0K赞 | https://x" in result
+        assert "测试 | 1.0K赞 |  | https://x" not in result
+
+    def test_viral_challenges_block_shown_at_top(self, sample_personas, fixed_date) -> None:
+        """v4.6.0：全平台挑战块在简报顶部，标题 + 玩法 + 样本 + 仿拍"""
+        data = {
+            "viral_challenges": [
+                {
+                    "name": "Hold the moan（憋反应对比格式）",
+                    "desc": "正式场合表情 vs 私下情绪反应",
+                    "sample_url": "https://www.tiktok.com/@x/video/1",
+                    "sample_likes": 500000,
+                    "fanpai_brief": "26 人都能蹭，建议 Iris 先拍",
+                },
+            ],
+            "personas": {},
+        }
+        result = render_briefing.format_briefing(data, sample_personas, today=fixed_date)
+        # 挑战块在 Sophie segment 之前
+        challenge_idx = result.find("🔥 全平台热门挑战 Top 3")
+        sophie_idx = result.find("Sophie (")
+        assert challenge_idx < sophie_idx
+        # 挑战内容
+        assert "1. Hold the moan（憋反应对比格式）" in result
+        assert "玩法：正式场合表情 vs 私下情绪反应" in result
+        assert "样本：https://www.tiktok.com/@x/video/1 | 50.0万赞" in result
+        assert "仿拍：26 人都能蹭" in result
+        assert "—— 以下为各赛道 Top 1 ——" in result
+
+    def test_no_challenges_no_challenge_block(self, sample_personas, fixed_date) -> None:
+        """没有 viral_challenges 字段时不显示挑战块"""
+        data = {"personas": {}}
+        result = render_briefing.format_briefing(data, sample_personas, today=fixed_date)
+        assert "全平台热门挑战" not in result
+        assert "—— 以下为各赛道 Top 1 ——" not in result
+
+    def test_zero_hit_uses_v460_wording(self, sample_personas, fixed_date) -> None:
+        """v4.6.0：0 命中文案改成「24h 内 0 命中 ≤15s 模板」"""
+        data = {"personas": {}}
+        result = render_briefing.format_briefing(data, sample_personas, today=fixed_date)
+        assert "(24h 内 0 命中 ≤15s 模板)" in result
+
     def test_fanpai_brief_empty_no_arrow_line(self, sample_personas, fixed_date) -> None:
         """没有 fanpai_brief 时不要打 → 空行"""
         data = {
@@ -289,7 +357,7 @@ class TestFormatBriefing:
         ava_pos = result.find("Ava (@ava.glow3)")
         ezra_pos = result.find("Ezra (@ezra.style2)")
         ava_section = result[ava_pos:ezra_pos]
-        assert "(24h 内 0 命中)" in ava_section
+        assert "(24h 内 0 命中 ≤15s 模板)" in ava_section
 
 
 # ---------- 日期 / 星期映射 ----------

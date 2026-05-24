@@ -4,6 +4,64 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [4.6.0] - 2026-05-25
+
+### Added
+
+- **`skills/tk-template-scout/grab_viral_challenges.py`**（260 行）—— 自动化全平台挑战样本抓取 + 时间窗验证脚本。
+  - 输入：Claude WebSearch 后的候选 hashtag 数组（JSON via stdin / file）
+  - 流程：Playwright 抓 hashtag 页 → yt-dlp 验证每个样本的点赞 / 时长 / 发布时间 → 硬过滤 ≤ N 天前 → 按点赞排序取 Top 1
+  - 输出：`{"verified": [...], "rejected": [{"reason": "all samples > 7 days old (closest 219 days)"}, ...]}`
+  - **防止重复犯"拿过期样本充数 viral 挑战"的错**（之前手工流程犯过：把 Group 7 / and Emily 的几个月前样本当 5 月新趋势）
+- **`skills/tk-template-scout/validate_translated.py`**（180 行）—— 协议层验证 translated.json schema。
+  - 检查 viral_challenges 必填字段、sample_url 必须 https、fanpai_brief 长度
+  - 检查每条 video 的 title_cn / fanpai_brief 字段、长度、句首格式
+  - 退出码区分 `0 完美` / `1 fatal` / `2 warnings 可降级`
+  - 防 Claude 翻译漂移
+- **`tests/test_validate_translated.py`**（17 个新单测）—— 覆盖协议验证
+
+### Changed - SKILL.md（核心修正：抽象 query + 防回声室）
+
+- **`us-trend-scout/SKILL.md` Step 3**：8 路 WebSearch 全部抽象化
+  - **绝对禁止 hardcode**：公司名 / 例子名 / 产品类型 / 挑战形态
+  - **只用**：类目 + 时间 + 地区 + 平台 + 抽象趋势词（shift / movement / phenomenon / surge / cultural / behavioral）
+  - 新 query 实测有效：拿到 "65% Gen Z 自认创作者"、"comfort culture replaces hustle" 等具体趋势（不是泛言）
+- **`tk-template-scout/SKILL.md` Step 0**：挑战 query 改抽象 + 加 7 天样本验证强制
+  - 锚定一个核心："**病毒级非舞蹈内容**"（viral non-dance content）
+  - 必须调 grab_viral_challenges.py 验证样本时间窗（≤ 7 天），不通过的候选自动丢弃
+- **设计原则段（新增到两个 SKILL.md）**：广 → 严 → 具 三层漏斗
+  ```
+  Step 3 query 层（广）：抽象趋势词，不预设答案
+       ↓
+  Step 4 筛选层（严）：在搜索结果挑具体可证实
+       ↓
+  Step 5 配对层（具）：基于人设的具体仿拍 brief
+  ```
+
+### Why this matters (深层教训)
+
+v4.5.x 出过 3 个典型偏离：
+
+1. **hardcode 公司名**（query 写 `Anthropic Meta Microsoft`）→ 搜索引擎只能返回这几家，新趋势找不到
+2. **hardcode 挑战类型**（query 写 `dance / format / meme`）→ dance 在搜索权重过高，结果全是编舞
+3. **拿过期样本充数**（"and Emily" 52 天前 / "Group 7" 219 天前 当 5 月 viral 挑战）→ 没去抓样本验证
+
+**根因**：我把"上次找到的具体东西"当作"下次 query 的锚定" = 回声室。
+
+**修正**：
+- query 抽象化（**渔网越广越好**）
+- 筛选锋利化（**在搜索结果里挑具体证据**）
+- 自动化验证（grab_viral_challenges.py 强制样本时间窗）
+- 协议层守门（validate_translated.py 卡 schema）
+
+### Implementation
+
+- 新代码：grab_viral_challenges.py + validate_translated.py + test_validate_translated.py
+- 工程化：之前手工流程（WebSearch → 抓样本 → 验证时间窗）现在自动化
+- ci.yml：py_compile 加 grab_viral_challenges.py + validate_translated.py
+- 测试覆盖：109 → **126 passed**（17 新测试）
+
+
 ## [4.5.0] - 2026-05-24
 
 ### Added

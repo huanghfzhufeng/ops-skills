@@ -50,12 +50,28 @@ $EDITOR ~/.config/ops-skills/personas.yaml
 
 跨 plugin 升级保留。
 
-## 选择模式
+## v4.6.0 默认流程（严格 24h + Top 1 + ≤15s + 全平台挑战）
+
+**用户说"跑一次 TK 模板" → 默认走这个流程**：
+
+```
+Step 0: Claude 用 WebSearch 找全平台 Top 3 热门挑战（跨赛道 viral phenomenon）
+Step 1: 加载 yaml（personas.yaml + tk_keywords.yaml）
+Step 2: 算日期
+Step 3-5: 跳过（v4.6.0 不走 MVP 模式）
+Step 6: scout_strict.py 抓 26 人 × 24h × Top 1 × ≤15s
+Step 7: Claude 翻译 + 生成挑战和 persona 仿拍 brief
+Step 8: render_briefing.py 渲染 → 推飞书
+```
+
+**旧 MVP 模式**（WebSearch + yt-dlp 不带 24h 硬过滤）废弃但保留代码备用，不走。
+
+## 选择模式（旧文档保留作历史）
 
 听用户口令决定走哪条：
 
-- **MVP 模式**（默认）：用户说"跑一次 tk 模板"、"TK 模板日推"。走下面 Step 1-8。简报会标注"数据多数命中 7d/all（Google 索引滞后）"。
-- **严格 24h 模式**：用户说"跑一次 TK 模板 严格 24h"、"TK 模板严格模式"、"tk 严格 24h"。**跳过** Step 3-5，改走 [严格 24h 模式](#严格-24h-模式) 那一节。Step 1 / 2 / 6 / 7 / 8 仍然一样。
+- **MVP 模式**（旧 v4.2，废弃）：仅历史代码保留
+- **v4.6.0 默认**：跑严格 24h + Top 1 ≤15s + 全平台挑战块
 
 ## 工作流（MVP 模式，按顺序执行）
 
@@ -130,6 +146,66 @@ scout.py 用 yt-dlp + `--cookies-from-browser chrome` 抓每个 URL 的真实点
 **第一次跑失败**（Chrome cookies 报错 / 单视频抓不到）：
 - 提示用户去 `https://www.tiktok.com` 登录任意账号刷新 cookies
 - 复跑 scout.py 一次再失败 → 不阻塞，标记该 persona 数据为空，继续后续
+
+### Step 0 - 抓全平台热门挑战 Top 3（v4.6.0 新增，必做）
+
+**作用 >>> 细分赛道模板**。这是简报最重要的板块，放在最顶部。
+
+挑战 = 跨赛道传播的 viral phenomenon，**有具体玩法 / 文化梗 / 名字**（如冰桶挑战、韩国棒球应援）。不是简单的格式或 sound trend。
+
+**步骤**：
+
+1. Claude 并行 3 路 WebSearch（同 message 一次发，**v4.6.0 抽象化 query**）：
+   - `TikTok viral non-dance content this week {date} US 2026`
+   - `TikTok non-dance viral {date} cross-niche cultural moment`
+   - `TikTok hottest non-dance trend {date} platform-wide`
+
+   **核心锚定**：「**病毒级非舞蹈内容**」（viral non-dance content）。
+   **不要**在 query 里 hardcode 挑战类型（dance/format/meme/skit/POV/ritual）—— 这会把信号空间切碎且 dance 算法权重过高。
+
+2. Claude 从结果里筛 Top 3 具体可证实的挑战。**筛选标准**：
+   - ✅ 保留：有具体名字 + 有玩法 + 跨赛道传播
+   - ❌ 排除：单个赛道的 niche trend、不具名的 micro-format、个人 viral 视频
+
+3. **必须抓样本视频验证时间窗**（v4.6.0 防回声室关键）：
+   - 对每个候选挑战，去 `https://www.tiktok.com/tag/<hashtag>` 抓真实样本
+   - **样本视频发布时间必须在过去 7 天内**（不要拿 2024 年的爆款充数）
+   - 如果某个挑战找不到 7 天内的真样本 → 丢弃换下一个候选
+   - 这一步用 yt-dlp `--dump-json` 拿 timestamp 验证
+
+3. 对每个挑战，调 scout_strict.py 抓 1 个样本视频（**挑战样本不限时长**，看格式不是看仿拍）：
+   ```bash
+   python3 scout_strict.py --keywords <(echo "ch1: { keywords: ['<挑战 hashtag 名>'] }") \
+     --source both --top-n 1 --max-duration 0 --max-age-hours 168 \
+     > /tmp/challenge-sample-1.json
+   ```
+   `--max-duration 0` 关闭时长过滤；`--max-age-hours 168` 放宽到 1 周（挑战样本不要求 24h 内）
+
+4. 把 3 个挑战的元数据写到 `result.json` 的 `viral_challenges` 字段：
+   ```json
+   {
+     "viral_challenges": [
+       {
+         "name": "Hold the moan（憋反应对比格式）",
+         "desc": "正式场合表情 vs 私下情绪反应，1-2 秒强对比",
+         "sample_url": "https://www.tiktok.com/@x/video/...",
+         "sample_likes": 500000,
+         "fanpai_brief": "26 人都能蹭，建议 Iris / Caden / Ezra 先拍"
+       },
+       ...（共 3 条）
+     ],
+     "personas": { ... }
+   }
+   ```
+
+5. render_briefing.py 自动渲染到简报顶部"🔥 全平台热门挑战 Top 3"段。
+
+**格式约束**：
+- `name`：英文原名（中文括号说明），如 `"Hold the moan（憋反应对比格式）"`
+- `desc`：1-2 句玩法描述，让运营 1 秒看懂怎么玩
+- `sample_url`：1 个真实样本视频 URL（看到格式即可，不强求 24h 内）
+- `sample_likes`：样本视频的点赞数（用于读者判断热度）
+- `fanpai_brief`：1 句仿拍建议（适配的 persona + 简单 brief）
 
 ### Step 6 - Claude 翻译 + 生成仿拍 brief（v4.5.0 新增，必做）
 
@@ -285,23 +361,26 @@ UTC 01:00 = 北京 09:00（美东前一天晚上 8-9 点）。
 5. yt-dlp 给候选 URL 补 like_count / title / uploader
 6. 按 like_count 取 Top 3
 
-**单条命令**（替代 MVP 模式的 Step 3-5）：
+**v4.6.0 单条命令**（默认 Top 1 + ≤15s 硬过滤）：
 
 ```bash
 python3 "<skill-dir>/scout_strict.py" \
   --keywords "$KEYWORDS" \
   --max-age-hours 24 \
-  --top-n 3 \
+  --top-n 1 \
+  --max-duration 15 \
   --parallel 4 \
   --min-likes-warn 500 \
   > result.json 2> strict.log
 ```
 
 参数：
+- `--top-n 1`（v4.6.0 默认）：每 persona 只取最热 1 条
+- `--max-duration 15`（v4.6.0 默认）：硬过滤 >15s 视频，不进 Top
 - `--parallel 4`：Playwright worker 数（每个复用 1 个 browser context 跑多个 hashtag，避免重复创建）
 - `--scrolls 3`：每个 hashtag 页滚动加载次数
 - `--retry 2`：单 hashtag 失败重试次数
-- `--min-likes-warn 500`：Top1 点赞低于这个值的 persona 会被标 `low_heat_warning: true`，简报里要明示
+- `--min-likes-warn 500`：Top1 点赞低于这个值的 persona 会被标 `low_heat_warning: true`
 
 脚本会自动从 Chrome 导 cookies 到 `/tmp/tiktok-cookies.txt`，如果 cookies 已存在则直接复用。
 

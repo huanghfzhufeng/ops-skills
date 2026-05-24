@@ -87,6 +87,7 @@ class VideoRecord:
     comment_count: int
     timestamp: int        # yt-dlp 拿到的真实值
     source: str           # 候选阶段确定的 source（'search' / 'hashtag' / 'both'）
+    duration: int = 0     # v4.6.0：视频时长（秒），用于 ≤15s 硬过滤；0 = 未知
 
 
 # ---------- 配置常量 ----------
@@ -508,6 +509,7 @@ def fetch_metadata(url: str, source: str = "hashtag", browser: str = "chrome",
             comment_count=int(data.get("comment_count") or 0),
             timestamp=int(data.get("timestamp") or 0),
             source=source,
+            duration=int(data.get("duration") or 0),
         )
     except (subprocess.TimeoutExpired, json.JSONDecodeError):
         return None
@@ -567,10 +569,17 @@ def build_report(
     records_by_persona: dict[str, list[VideoRecord]],
     top_n: int,
     min_likes_warn_threshold: int,
+    max_duration_seconds: int = 0,
 ) -> dict[str, Any]:
-    """组装最终输出。保留凑 Top N + 标 low_heat_warning。"""
+    """
+    组装最终输出。保留凑 Top N + 标 low_heat_warning。
+    v4.6.0：max_duration_seconds > 0 时硬过滤掉 duration > max_duration_seconds 的视频。
+    """
     per_persona: dict[str, Any] = {}
     for persona, records in records_by_persona.items():
+        # v4.6.0 时长硬过滤（在排序之前）
+        if max_duration_seconds > 0:
+            records = [r for r in records if 0 < r.duration <= max_duration_seconds]
         sorted_recs = sorted(records, key=lambda r: -r.like_count)
         top = sorted_recs[:top_n]
         max_likes = top[0].like_count if top else 0
@@ -639,7 +648,10 @@ def main() -> None:
     parser.add_argument("--keywords", required=True, type=Path)
     parser.add_argument("--cookies", type=Path, default=Path("/tmp/tiktok-cookies.txt"))
     parser.add_argument("--max-age-hours", type=int, default=24)
-    parser.add_argument("--top-n", type=int, default=3)
+    parser.add_argument("--top-n", type=int, default=1,
+                        help="每 persona 取 Top N（v4.6.0 默认 1）")
+    parser.add_argument("--max-duration", type=int, default=15,
+                        help="视频最大时长（秒）硬过滤，0 = 不限。v4.6.0 默认 15s")
     parser.add_argument("--source", choices=sorted(VALID_SOURCES), default="search",
                         help="数据源：search 单源（默认，贴 SKILL 原需求）/ hashtag 单源 / both 双源融合")
     parser.add_argument("--parallel", type=int, default=DEFAULT_PARALLEL)
@@ -715,9 +727,10 @@ def main() -> None:
     log.info("yt-dlp phase done in %.1fs, ok=%d fail=%d",
              time.time() - t1, ok_count, fail_count)
 
-    # 8. 组装输出
+    # 8. 组装输出（v4.6.0：含时长硬过滤）
     per_persona = build_report(
         candidates_by_persona, records_by_persona, args.top_n, args.min_likes_warn,
+        max_duration_seconds=args.max_duration,
     )
 
     # 全局 source 分布
@@ -730,6 +743,7 @@ def main() -> None:
         "mode": f"strict_24h_playwright_source={args.source}",
         "generated_at": int(time.time()),
         "max_age_hours": args.max_age_hours,
+        "max_duration_seconds": args.max_duration,
         "top_n": args.top_n,
         "source_mode": args.source,
         "min_likes_warn_threshold": args.min_likes_warn,

@@ -66,6 +66,16 @@ def fmt_likes(n: int) -> str:
     return f"{n}赞"
 
 
+def fmt_duration(seconds: int) -> str:
+    """视频时长：12 → '12s'，65 → '1m5s'，0 / 缺失 → ''。"""
+    if not seconds or seconds <= 0:
+        return ""
+    if seconds < 60:
+        return f"{seconds}s"
+    m, s = divmod(seconds, 60)
+    return f"{m}m{s}s" if s else f"{m}m"
+
+
 def capitalize_persona(pk: str) -> str:
     """'sophie' → 'Sophie'。简单首字母大写。"""
     return pk[0].upper() + pk[1:] if pk else pk
@@ -131,6 +141,29 @@ def format_briefing(
 
     lines: list[str] = [f"TK模板日推 | {mon}月{day}日（{wd}）", ""]
 
+    # v4.6.0：顶部全平台热门挑战 Top 3（Claude 主线填到 data['viral_challenges']）
+    challenges = data.get("viral_challenges") or []
+    if challenges:
+        lines.append("🔥 全平台热门挑战 Top 3")
+        lines.append("")
+        for i, ch in enumerate(challenges[:3], 1):
+            name = ch.get("name", "").strip() or "(挑战名缺失)"
+            desc = ch.get("desc", "").strip()
+            sample_url = ch.get("sample_url", "").strip()
+            sample_likes = ch.get("sample_likes")
+            fanpai = ch.get("fanpai_brief", "").strip()
+            lines.append(f"{i}. {name}")
+            if desc:
+                lines.append(f"   玩法：{desc}")
+            if sample_url:
+                likes_str = f" | {fmt_likes(sample_likes)}" if sample_likes else ""
+                lines.append(f"   样本：{sample_url}{likes_str}")
+            if fanpai:
+                lines.append(f"   仿拍：{fanpai}")
+            lines.append("")
+        lines.append("—— 以下为各赛道 Top 1 ——")
+        lines.append("")
+
     persona_data = data.get("personas", {})
 
     for pk in DISPLAY_ORDER:
@@ -143,14 +176,17 @@ def format_briefing(
 
         info = persona_data.get(pk)
         if not info or not info.get("videos"):
-            lines.append("(24h 内 0 命中)")
+            lines.append("(24h 内 0 命中 ≤15s 模板)")
         else:
             for v in info["videos"]:
                 # v4.5.0：优先用 title_cn（Claude 翻译后写回 JSON），fallback 用 raw title
                 title = clean_title(v.get("title_cn") or v.get("title", ""))
                 likes = fmt_likes(v.get("like_count") or 0)
                 url = v.get("url", "")
-                lines.append(f"{title} | {likes} | {url}")
+                # v4.6.0：视频时长显示在点赞数后
+                dur = fmt_duration(v.get("duration") or 0)
+                dur_str = f" | {dur}" if dur else ""
+                lines.append(f"{title} | {likes}{dur_str} | {url}")
                 # v4.5.0：如果有 fanpai_brief（Claude 生成的仿拍建议），加一行 →
                 brief = (v.get("fanpai_brief") or "").strip()
                 if brief:

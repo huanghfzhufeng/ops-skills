@@ -72,12 +72,57 @@
 - ❌ 不要"非常好的模板，建议仿拍"这种空话
 - ❌ 不要超过 30 字
 
+## v4.6.0：全平台挑战翻译规则（Step 0 抓挑战后翻译）
+
+对 `viral_challenges` 数组里每条挑战，确保：
+
+### name 字段格式
+**英文原名（中文括号说明）**
+
+例子：
+| 原挑战名 | name 字段 |
+|---|---|
+| Hold the moan | `Hold the moan（憋反应对比格式）` |
+| Demure | `Demure（demure 反差段子）` |
+| Korean baseball cheer | `韩国棒球应援（K-pop 风潮 + 观众席手势）` |
+| Ice bucket challenge | `冰桶挑战（公益仪式型挑战，浇冰水）` |
+
+### desc 字段（1-2 句玩法描述）
+
+**目标**：让运营 1 秒看懂怎么玩 / 怎么参与。
+
+例子：
+- `Hold the moan`: `正式场合表情 vs 私下情绪反应，1-2 秒强对比`
+- `Demure`: `表面 demure（端庄）内心狂野的反差段子`
+- `韩国棒球应援`: `手指挥应援棒做心形 / 比心动作，配 K-pop 主题音乐`
+
+### fanpai_brief 字段
+
+**目标**：1 句仿拍建议，列出最适合的 3-5 个 persona。
+
+例子：
+- `Hold the moan`: `26 人都能蹭，建议 Iris（四大上班 vs 桌底） / Caden（高中老师 vs 走廊） / Ezra 先拍`
+- `Demure`: `适合 Sophie / Silver / Iris / Eleanor，反差场景看 persona 职业`
+- `韩国棒球应援`: `适合 Nari、Eleanor、Kai，K-pop 文化共鸣`
+
+---
+
 ## 输出格式（写到 translated.json）
 
 ```json
 {
   "mode": "...原值不动...",
   "generated_at": ...,
+  "viral_challenges": [
+    {
+      "name": "Hold the moan（憋反应对比格式）",
+      "desc": "正式场合表情 vs 私下情绪反应，1-2 秒强对比",
+      "sample_url": "https://www.tiktok.com/@x/video/...",
+      "sample_likes": 500000,
+      "fanpai_brief": "26 人都能蹭，建议 Iris / Caden / Ezra 先拍"
+    },
+    ...（共 3 条）
+  ],
   "personas": {
     "sophie": {
       "videos": [
@@ -86,6 +131,7 @@
           "title": "The people who feel the most luxurious are rarely trying the hardest",
           "title_cn": "「真正显得有钱的人，反而不在用力穿」quiet luxury 哲学金句卡片",
           "fanpai_brief": "Sophie 拍「策展女孩对 quiet luxury 的 3 句 hot take」西村画廊门口取景",
+          "duration": 11,
           "like_count": 9641,
           "uploader": "iamshaniakhan",
           "...其他原字段不变...": "..."
