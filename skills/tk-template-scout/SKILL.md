@@ -131,50 +131,76 @@ scout.py 用 yt-dlp + `--cookies-from-browser chrome` 抓每个 URL 的真实点
 - 提示用户去 `https://www.tiktok.com` 登录任意账号刷新 cookies
 - 复跑 scout.py 一次再失败 → 不阻塞，标记该 persona 数据为空，继续后续
 
-### Step 6 - 渲染简报（调 render_briefing.py，不要 Claude 即兴拼）
+### Step 6 - Claude 翻译 + 生成仿拍 brief（v4.5.0 新增，必做）
 
-**重要**：v4.4.0 起简报格式由 `render_briefing.py` 代码固化。Claude **直接调
-脚本**拿成品输出，**不要二次加工 / 加 emoji / 加"模板"行 / 加"仿拍"行**。
+**v4.5.0 起简报必须中文化 + 含仿拍建议**。这一步由 **Claude 主线**完成（不靠
+外部 API），按 `translate_prompt.md` 的规则**一次性**翻译 + 生成。
 
 ```bash
-python3 "<skill-dir>/render_briefing.py" --json result.json > briefing.txt
+# 1. 读 prompt 规则
+cat "<skill-dir>/translate_prompt.md"
+
+# 2. 读 scout 数据
+cat result.json
+
+# 3. 读 personas（拿每人人设描述）
+cat "<us-trend-scout-skill-dir>/personas.yaml"
 ```
 
-或一行管道：
+Claude 按 prompt 规则，对每条 video 生成两个字段并写回 JSON：
+
+- `title_cn`：20-40 字中文化标题（保留专有名词英文 / 标视频形式 / 用「」标金句）
+- `fanpai_brief`：30 字内的仿拍 brief（句首 `<Persona> 拍...` + 具体场景 + 动作 + 钩子）
+
+输出 `translated.json`（保留所有原字段 + 加这两个新字段）。
+
+**重要约束**：
+- ❌ 不要分多次小 API 调用（浪费 context）
+- ❌ 不要漏 video（必须每条 video 都有 title_cn 和 fanpai_brief）
+- ❌ 不要重新解释 persona 人设（briefing 已有 handle，brief 句首 `<Persona> 拍...` 即可）
+- ✅ 严格按 translate_prompt.md 里的例子风格
+
+### Step 6.5 - 渲染简报（调 render_briefing.py，不要 Claude 即兴拼）
 
 ```bash
-python3 "<skill-dir>/scout_strict.py" --keywords "$KEYWORDS" --source search \
-  | python3 "<skill-dir>/render_briefing.py" > briefing.txt
+python3 "<skill-dir>/render_briefing.py" --json translated.json > briefing.txt
 ```
 
-输出格式严格按用户原 spec（详见下方"输出格式"段）。Persona 顺序、点赞数中文化、
-0 命中显示等全部由代码强制，不再由 Claude 维护。
+`render_briefing.py` 优先用 `title_cn`（v4.5.0 新增），有 `fanpai_brief` 时在
+视频条目后加一行 `→ <brief>`。格式 100% 代码固化，Claude **不要二次加工**。
 
-**如果用户想换格式**：改 `render_briefing.py` 的 `format_briefing()` 函数 +
-`test_render_briefing.py` 加测试，不要改 SKILL.md 里的格式描述（会偏离）。
+### Step 7 - 推飞书（v4.5.0 双 webhook）
 
-### Step 7 - 推飞书（如配置了）
+`~/.config/ops-skills/tk-template-scout.yaml` 存两个独立 webhook：
 
-如果 `~/.config/ops-skills/tk-template-scout.yaml` 存在且 `feishu_webhook_url` 不含 `xxxxx`：
+```yaml
+feishu_webhook_trend: "https://open.feishu.cn/open-apis/bot/v2/hook/...."
+feishu_webhook_template: "https://open.feishu.cn/open-apis/bot/v2/hook/...."
+```
 
-简报字符数估算 26 × 350 ≈ 9000 字符，单条飞书 text 消息（30000 上限）能装下。
+tk-template-scout 推 `feishu_webhook_template`：
 
 ```bash
-WEBHOOK=$(grep '^feishu_webhook_url:' ~/.config/ops-skills/tk-template-scout.yaml | sed 's/^feishu_webhook_url: *"\(.*\)"$/\1/')
+WEBHOOK=$(grep '^feishu_webhook_template:' ~/.config/ops-skills/tk-template-scout.yaml | sed 's/^feishu_webhook_template: *"\(.*\)"$/\1/')
 
-python3 -c "
+if [ -z "$WEBHOOK" ] || [[ "$WEBHOOK" == *xxxxx* ]]; then
+  echo "skip 飞书推送：webhook 未配置"
+else
+  python3 -c "
 import json, sys
-with open('briefing.txt') as f:
-    text = f.read()
+text = open('briefing.txt').read()
 print(json.dumps({'msg_type': 'text', 'content': {'text': text}}, ensure_ascii=False))
-" > briefing.json
+  " > briefing.json
 
-curl -sS -X POST "$WEBHOOK" \
-  -H "Content-Type: application/json" \
-  -d @briefing.json
+  RESPONSE=$(curl -sS -X POST "$WEBHOOK" \
+    -H "Content-Type: application/json" \
+    -d @briefing.json)
+  echo "飞书推送响应：$RESPONSE"
+fi
 ```
 
-webhook 返回非 200 → 把 response body dump 给用户，简报继续 dump 对话。
+webhook 返回非 success → 把 response body dump 给用户，简报继续 dump 对话。
+us-trend-scout 用 `feishu_webhook_trend` 同套路推（见 us-trend-scout/SKILL.md）。
 
 ### Step 8 - 输出 + 报告
 

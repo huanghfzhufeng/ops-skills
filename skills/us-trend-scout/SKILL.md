@@ -1,6 +1,6 @@
 ---
 name: us-trend-scout
-description: 美区 TikTok 热点抓取 + 26 数字角色创意配对。每天用 6 路并行 web search 抓美区前一天热点（健康/美妆/健身/科技 + 平台格式 + 文化情绪），筛 5-8 条配对 26 个数字角色出具体创意，加平台格式趋势 + 文化情绪，输出中文纯文本简报到对话。触发：用户说"热点日报"、"美区热点"、"us trend"、"trend scout"、"跑一次热点"，或被 /schedule 定时触发。
+description: 美区 TikTok 热点抓取 + 26 数字角色创意配对。每天用 6 路并行 web search 抓美区前一天热点（健康/美妆/健身/科技 + 平台格式 + 文化情绪），筛 5-8 条配对 26 个数字角色出具体创意，加平台格式趋势 + 文化情绪，输出中文纯文本简报到对话，v4.5.0 起同时推送飞书（feishu_webhook_trend）。触发：用户说"热点日报"、"美区热点"、"us trend"、"trend scout"、"跑一次热点"，或被 /schedule 定时触发。
 ---
 
 # US Trend Scout
@@ -83,6 +83,38 @@ USER_PERSONAS="$HOME/.config/ops-skills/personas.yaml"
 
 按下方"输出格式"，**纯文本，无 markdown 符号**。
 
+### Step 7.5 - 推飞书（v4.5.0 复活）
+
+`~/.config/ops-skills/tk-template-scout.yaml` 存了双 webhook（与 tk-template-scout 共用配置文件）：
+
+```yaml
+feishu_webhook_trend: "https://open.feishu.cn/open-apis/bot/v2/hook/...."
+feishu_webhook_template: "https://open.feishu.cn/open-apis/bot/v2/hook/...."
+```
+
+us-trend-scout 推 `feishu_webhook_trend`：
+
+```bash
+WEBHOOK=$(grep '^feishu_webhook_trend:' ~/.config/ops-skills/tk-template-scout.yaml | sed 's/^feishu_webhook_trend: *"\(.*\)"$/\1/')
+
+if [ -z "$WEBHOOK" ] || [[ "$WEBHOOK" == *xxxxx* ]]; then
+  echo "skip 飞书推送：webhook_trend 未配置"
+else
+  python3 -c "
+import json
+text = open('briefing.txt').read()
+print(json.dumps({'msg_type': 'text', 'content': {'text': text}}, ensure_ascii=False))
+  " > briefing.json
+
+  RESPONSE=$(curl -sS -X POST "$WEBHOOK" \
+    -H "Content-Type: application/json" \
+    -d @briefing.json)
+  echo "飞书推送响应：$RESPONSE"
+fi
+```
+
+webhook 返回非 success → 把 response body dump 给用户，简报继续 dump 对话。
+
 ### Step 8 - 输出 + 报告
 
 把整份简报**直接 dump 到对话**给用户看。然后简要报告：
@@ -90,6 +122,7 @@ USER_PERSONAS="$HOME/.config/ops-skills/personas.yaml"
 - 6 路 search 全部成功 / 几路失败
 - 热点条数
 - 涉及人物数
+- 飞书推送状态码（如配置）
 
 ---
 

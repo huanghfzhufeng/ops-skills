@@ -84,4 +84,5 @@ jobs:
           cache: pip
       - run: pip install -r requirements-dev.txt
       - run: python3 -m py_compile skills/xcmo-mobile/mobile.py skills/tk-template-scout/scout.py skills/tk-template-scout/scout_strict.py skills/tk-template-scout/render_briefing.py
+      - run: bash -n setup.sh  # 验证 setup.sh 语法
       - run: pytest -v -m unit

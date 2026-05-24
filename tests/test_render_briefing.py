@@ -179,6 +179,68 @@ class TestFormatBriefing:
             cap = render_briefing.capitalize_persona(pk)
             assert f"{cap} ({handle})" in result, f"Missing {pk}"
 
+    def test_title_cn_takes_priority_over_title(self, sample_personas, fixed_date) -> None:
+        """v4.5.0：title_cn 存在时优先用，fallback 才用 raw title"""
+        data = {
+            "personas": {
+                "sophie": {
+                    "videos": [
+                        {"title": "raw english", "title_cn": "中文标题描述",
+                         "like_count": 9641, "url": "https://x/1"},
+                    ],
+                },
+            },
+        }
+        result = render_briefing.format_briefing(data, sample_personas, today=fixed_date)
+        assert "中文标题描述 | 9.6K赞 | https://x/1" in result
+        assert "raw english" not in result
+
+    def test_fallback_to_raw_title_when_no_title_cn(self, sample_personas, fixed_date) -> None:
+        data = {
+            "personas": {
+                "sophie": {
+                    "videos": [
+                        {"title": "raw english only", "like_count": 100, "url": "https://x"},
+                    ],
+                },
+            },
+        }
+        result = render_briefing.format_briefing(data, sample_personas, today=fixed_date)
+        assert "raw english only | 100赞 | https://x" in result
+
+    def test_fanpai_brief_shown_as_arrow_line(self, sample_personas, fixed_date) -> None:
+        """v4.5.0：fanpai_brief 存在时在视频条目后加一行 → <brief>"""
+        data = {
+            "personas": {
+                "sophie": {
+                    "videos": [
+                        {
+                            "title_cn": "测试中文标题",
+                            "fanpai_brief": "Sophie 拍策展女孩在画廊门口的 outfit",
+                            "like_count": 1000, "url": "https://x",
+                        },
+                    ],
+                },
+            },
+        }
+        result = render_briefing.format_briefing(data, sample_personas, today=fixed_date)
+        assert "测试中文标题 | 1.0K赞 | https://x" in result
+        assert "→ Sophie 拍策展女孩在画廊门口的 outfit" in result
+
+    def test_fanpai_brief_empty_no_arrow_line(self, sample_personas, fixed_date) -> None:
+        """没有 fanpai_brief 时不要打 → 空行"""
+        data = {
+            "personas": {
+                "sophie": {
+                    "videos": [
+                        {"title_cn": "测试", "like_count": 100, "url": "https://x"},
+                    ],
+                },
+            },
+        }
+        result = render_briefing.format_briefing(data, sample_personas, today=fixed_date)
+        assert "→" not in result
+
     def test_no_decorative_artifacts(self, sample_personas, fixed_date) -> None:
         """没有 emoji 分组、统计行、低热度标记等装饰。"""
         data = {

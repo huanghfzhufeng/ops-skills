@@ -4,6 +4,56 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [4.5.0] - 2026-05-24
+
+### Added
+
+- **`skills/tk-template-scout/translate_prompt.md`**：固化翻译 + 仿拍 brief 生成规则。Claude 主线执行 SKILL.md 时按此 prompt 一次性翻译所有 video title + 生成仿拍建议，写到 `translated.json`。不调外部 API，0 成本。
+  - 翻译规则：保留专有名词英文（TikTok / hashtag / 品牌名 / 配乐 / 地名）；金句用「」标；标视频形式（vlog / 段子 / 教程等）；20-40 中文字
+  - 仿拍 brief：句首 `<Persona> 拍...`，30 字内，必须含场景 + 动作 + 钩子
+  - 6 个 title 翻译例子 + 6 个 fanpai 例子（运营 1 秒可读 + 直接可执行）
+- **`render_briefing.py` 加 `title_cn` / `fanpai_brief` 字段支持**：
+  - 优先用 `title_cn`（Claude 翻译后），fallback `title`（raw 英文）
+  - `fanpai_brief` 存在时在视频条目后加一行 `→ <brief>`
+- **`tests/test_render_briefing.py` 加 4 个测试**：
+  - `test_title_cn_takes_priority_over_title`
+  - `test_fallback_to_raw_title_when_no_title_cn`
+  - `test_fanpai_brief_shown_as_arrow_line`
+  - `test_fanpai_brief_empty_no_arrow_line`
+
+### Changed
+
+- **6 个 persona 关键词优化**（基于 v4.4.1 实测数据）：
+  - `ava`: `high fashion / couture / fashion week` → `vogue runway / met gala / red carpet`（解决 24h 0 命中）
+  - `priya`: `tech wellness / data science life / health tech` → `women in tech / data scientist / tech career`（解决 24h 0 命中）
+  - `eleanor`: `sorority life / college girl / campus aesthetic` → `college vlog / dorm decor / bama rush`（解决暑假 0 命中）
+  - `clara`: `korean fashion / k beauty / seoul style` → `k drama makeup / glass skin / kbeauty haul`（low_heat 93 赞）
+  - `silver`: `NYC it girl / Manhattan aesthetic / PR girl life` → `nyc aesthetic / it girl / manhattan`（low_heat 364 赞）
+  - `jade`: `editorial fashion / luxury aesthetic / fashion editorial` → `street style / milan fashion week / paris fashion week`（low_heat 15 赞）
+- **`~/.config/ops-skills/tk-template-scout.yaml` 改双 webhook 格式**：
+  ```yaml
+  feishu_webhook_trend: "..."     # us-trend-scout 推这里
+  feishu_webhook_template: "..."  # tk-template-scout 推这里
+  ```
+- **tk-template-scout/SKILL.md 重写 Step 6/7**：
+  - Step 6 加 "Claude 翻译 + 生成仿拍 brief" 子步骤（必做）
+  - Step 6.5 渲染 `translated.json`（不是 `result.json`）
+  - Step 7 改双 webhook 推送（`feishu_webhook_template`）
+- **us-trend-scout/SKILL.md 复活推飞书**（Step 7.5）：推 `feishu_webhook_trend`
+- **`.github/workflows/ci.yml`**：加 `bash -n setup.sh` 语法验证
+
+### Why this matters
+
+v4.4.x 简报输出英文 raw title + 不带仿拍建议，运营拿到要自己再翻译再脑补拍法。
+v4.5.0 起：
+1. **简报即开即用**：中文标题 + 仿拍 brief 一行就懂能不能仿
+2. **飞书自动推**：跟 Claude 说"跑一次 TK 模板"→ 跑完 5 分钟内简报自动到飞书群，运营不用手工 curl
+3. **关键词更对路**：6 个 low_heat persona 改地道 hashtag，预计 24h 命中率从 23/26 提升到 26/26
+
+### Translation cost
+
+0（Claude 主线翻译，不调外部 API）。每次跑约多耗 30 秒翻译 + 30 秒 brief 生成。
+
 ## [4.4.1] - 2026-05-24
 
 ### Added

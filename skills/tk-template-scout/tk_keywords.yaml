@@ -27,10 +27,11 @@ spencer:
 
 ava:
   # 高级时尚 + F1 / 欧美文化时尚大事件
+  # v4.5.0 更新：high fashion / couture / fashion week 24h 0 命中，换更具体的标签
   keywords:
-    - "high fashion"
-    - "couture"
-    - "fashion week"
+    - "vogue runway"
+    - "met gala"
+    - "red carpet"
 
 mia:
   # 女性职场、宝妈、work life balance + 美国年轻妈妈关注的教育 / 社会文化
@@ -73,11 +74,12 @@ mason:
     - "summer beach"
 
 jade:
-  # 高级时尚（和 ava 区分：jade 走 editorial / 街拍角度）
+  # 高级时尚（和 ava 区分：jade 走 editorial / 街拍 / 时装周角度）
+  # v4.5.0 更新：原关键词 15 赞，换 fashion week street style 等更通用的
   keywords:
-    - "editorial fashion"
-    - "luxury aesthetic"
-    - "fashion editorial"
+    - "street style"
+    - "milan fashion week"
+    - "paris fashion week"
 
 emma:
   # 健康饮食、做菜
@@ -137,10 +139,11 @@ riley:
 
 clara:
   # 韩系时尚
+  # v4.5.0 更新：korean fashion 命中低（93 赞），换更视频化的标签
   keywords:
-    - "korean fashion"
-    - "k beauty"
-    - "seoul style"
+    - "k drama makeup"
+    - "glass skin"
+    - "kbeauty haul"
 
 leila:
   # 家居、trad wife
@@ -165,24 +168,27 @@ charlotte:
 
 priya:
   # 科技、健康
+  # v4.5.0 更新：tech wellness / data science life / health tech 24h 0 命中，换更地道的
   keywords:
-    - "tech wellness"
-    - "data science life"
-    - "health tech"
+    - "women in tech"
+    - "data scientist"
+    - "tech career"
 
 silver:
-  # 用户未在上班 / 养号分组提及，暂保留原 NYC PR girl 标签
+  # 时髦拽妹 NYC 22 岁 PR Associate
+  # v4.5.0 更新：原关键词 364 赞，换更通用的爆款词
   keywords:
-    - "NYC it girl"
-    - "Manhattan aesthetic"
-    - "PR girl life"
+    - "nyc aesthetic"
+    - "it girl"
+    - "manhattan"
 
 eleanor:
   # 大学姐妹会、时尚、女性
+  # v4.5.0 更新：sorority life / campus aesthetic 暑假 24h 0 命中，换更通用 + bama rush 季节性
   keywords:
-    - "sorority life"
-    - "college girl"
-    - "campus aesthetic"
+    - "college vlog"
+    - "dorm decor"
+    - "bama rush"
 
 iris:
   # 女性职场

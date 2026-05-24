@@ -146,10 +146,15 @@ def format_briefing(
             lines.append("(24h 内 0 命中)")
         else:
             for v in info["videos"]:
-                title = clean_title(v.get("title", ""))
+                # v4.5.0：优先用 title_cn（Claude 翻译后写回 JSON），fallback 用 raw title
+                title = clean_title(v.get("title_cn") or v.get("title", ""))
                 likes = fmt_likes(v.get("like_count") or 0)
                 url = v.get("url", "")
                 lines.append(f"{title} | {likes} | {url}")
+                # v4.5.0：如果有 fanpai_brief（Claude 生成的仿拍建议），加一行 →
+                brief = (v.get("fanpai_brief") or "").strip()
+                if brief:
+                    lines.append(f"→ {brief}")
         lines.append("")
 
     return "\n".join(lines).rstrip() + "\n"
