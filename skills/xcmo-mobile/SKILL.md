@@ -27,7 +27,24 @@ pip3 install qrcode pillow
 
 Claude 会把 token 写到 `~/.claude/memory/xcmo-session.json`（权限 0600）。
 
-完成上面两步后，直接说 "下载 <你的邮箱> <日期> 的内容" 即可触发。
+### 3. Windows 用户额外注意（macOS / Linux 跳过）
+
+**第一次跑会弹"Windows 安全警告"对话框**，问"允许 Python 通过防火墙"。务必同时勾选：
+
+- ☑ **专用网络**（家庭/工作）
+- ☑ **公用网络**（默认不勾，但家用 WiFi 经常被 Windows 识别成 Public）
+
+只勾一项的话，手机扫码会看到 `Safari cannot open the page because the network connection was lost`。
+
+如果防火墙框已经被点掉了，PowerShell 跑这个把当前 WiFi 改成 Private：
+
+```powershell
+Set-NetConnectionProfile -InterfaceAlias 'Wi-Fi' -NetworkCategory Private
+```
+
+跑完 `--background` 模式后**不需要保持终端窗口开着** —— mobile.py 已用 `DETACHED_PROCESS` 标志让子进程脱离 console，关掉 cmd / PowerShell 后 HTTP server 继续活。停服务用 `taskkill /F /PID <PID>`（box 里会印出来）。
+
+准备好后，直接说 "下载 <你的邮箱> <日期> 的内容" 即可触发。
 
 ## 触发示例
 

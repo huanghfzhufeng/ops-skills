@@ -375,20 +375,43 @@ def serve_site_foreground(site_dir: Path, port: int) -> None:
             print("\n👋 服务已停止")
 
 
-def spawn_background_server(site_dir: Path, port: int) -> int:
-    """后台模式：起 `python3 -m http.server` 子进程，脱离当前 shell。返回 PID。
+def check_server_alive(url: str, timeout: float = 3.0) -> bool:
+    """HTTP GET 自检：确认 server 真的在端口上响应（spawn 完立刻调）。"""
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as r:
+            return r.status < 500
+    except (urllib.error.URLError, OSError, TimeoutError):
+        return False
 
-    子进程通过 `start_new_session=True` 脱离父进程会话，父进程退出后
-    子进程继续跑。日志写到 site_dir/_server.log。
+
+def spawn_background_server(site_dir: Path, port: int) -> int:
+    """后台模式：起 `python -m http.server` 子进程，脱离当前 shell。返回 PID。
+
+    跨平台脱离父进程，保证用户关掉跑 mobile.py 的终端窗口后 server 还活着：
+    - POSIX (macOS/Linux): start_new_session=True 调 setsid 脱离会话
+    - Windows: DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP 脱离 console
+      （Windows 上 start_new_session 会被静默忽略 —— 必须显式给 creationflags）
     """
     log_path = site_dir / "_server.log"
+    log_fh = open(log_path, "w", encoding="utf-8")
+
+    if sys.platform == "win32":
+        platform_kwargs = {
+            "creationflags": (
+                subprocess.DETACHED_PROCESS
+                | subprocess.CREATE_NEW_PROCESS_GROUP
+            ),
+        }
+    else:
+        platform_kwargs = {"start_new_session": True}
+
     proc = subprocess.Popen(
         [sys.executable, "-m", "http.server", str(port)],
         cwd=str(site_dir),
-        stdout=open(log_path, "w"),
+        stdout=log_fh,
         stderr=subprocess.STDOUT,
         stdin=subprocess.DEVNULL,
-        start_new_session=True,  # POSIX: setsid，脱离父进程
+        **platform_kwargs,
     )
     return proc.pid
 
@@ -627,24 +650,60 @@ def main() -> None:
             return
 
         if args.background:
-            # 后台模式：起子进程 → 开浏览器 → 退出（不阻塞 Claude）
+            # 后台模式：起子进程 → 自检 → 开浏览器 → 退出（不阻塞 Claude）
             pid = spawn_background_server(site_dir, port)
-            # 给子进程一点时间真正起来
             import time
-            time.sleep(1)
-            try:
-                webbrowser.open(f"http://localhost:{port}")
-            except (webbrowser.Error, OSError):
-                pass
-            print_box("🌐 服务已后台启动（浏览器自动打开）", [
+            time.sleep(1.5)  # 给 http.server 一点时间真起来
+
+            # 自检：本地 GET 确认 server 在听端口；不通就直接告知子进程没活
+            server_alive = check_server_alive(f"http://localhost:{port}/")
+
+            if server_alive:
+                try:
+                    webbrowser.open(f"http://localhost:{port}")
+                except (webbrowser.Error, OSError):
+                    pass
+
+            stop_cmd = (
+                f"taskkill /F /PID {pid}"
+                if sys.platform == "win32"
+                else f"kill {pid}"
+            )
+            log_path = site_dir / "_server.log"
+
+            box_lines = [
                 f"电脑访问:  http://localhost:{port}",
                 f"手机扫码:  http://{lan_ip}:{port}（同 WiFi）",
                 f"PID:      {pid}",
-                f"日志:     {site_dir}/_server.log",
-                f"停止:     kill {pid}",
+                f"日志:     {log_path}",
+                f"停止:     {stop_cmd}",
+            ]
+
+            if sys.platform == "win32":
+                box_lines += [
+                    "",
+                    "⚠ Windows 首次跑会弹防火墙框，必须勾【专用网络】+【公用网络】两项",
+                    "⚠ 若手机连不上（WiFi 是 Public 网络），PowerShell 跑：",
+                    "   Set-NetConnectionProfile -InterfaceAlias 'Wi-Fi' -NetworkCategory Private",
+                ]
+
+            box_lines += [
                 "",
                 "WiFi 换了？跑：mobile.py ... --refresh-only --background",
-            ])
+            ]
+
+            if server_alive:
+                print_box("🌐 服务已后台启动（浏览器自动打开）", box_lines)
+            else:
+                print_box(
+                    "⚠ 子进程已起但本地 HTTP 自检失败（server 可能没真起来）",
+                    box_lines + [
+                        "",
+                        f"🔍 看日志: {log_path}",
+                        "💡 常见原因: 端口被占用 / Python 被防火墙拦 / 子进程立刻退出",
+                    ],
+                )
+                sys.exit(1)
             return
 
         # 前台模式：阻塞直到 Ctrl+C（人工跑命令时用）

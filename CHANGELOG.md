@@ -4,6 +4,21 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [4.7.2] - 2026-05-25
+
+### Fixed - xcmo-mobile Windows 兼容性 + 后台 server 健康自检
+
+- **关掉 cmd / PowerShell 窗口后 HTTP server 还能继续跑（Windows 兼容性 bug 修复）**：原 `spawn_background_server` 用 `start_new_session=True` —— 这是 POSIX 专属（调 `setsid`），**Windows 上 Python 会静默忽略**，子进程不会真正脱离父 console。后果：用户在 Windows 跑完 `python mobile.py --background` 后**一关终端窗口，HTTP server 立刻死**，手机扫码就看到 `Safari cannot open the page because the network connection was lost`。改成跨平台分支：Windows 上用 `creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP`，POSIX 上保留 `start_new_session=True`。
+- **加 `--background` 模式启动后 HTTP 自检**：spawn 子进程后 sleep 1.5s 立刻 GET `http://localhost:<port>/` 一次确认 server 真的在听。失败时打印明确的 "⚠ 子进程已起但本地 HTTP 自检失败" 框 + 日志路径 + 常见原因（端口占用 / 防火墙拦 / 子进程立刻退出），并以 exit 1 退出 —— 让 Claude 这一侧能立刻把错误转述给用户，不再让用户白扫一个根本没人监听的二维码。
+- **跨平台 stop 命令**：输出 box 里"停止"行在 macOS/Linux 显示 `kill <PID>`，Windows 显示 `taskkill /F /PID <PID>`。
+- **Windows 用户专属提示**：检测到 `sys.platform == "win32"` 时输出 box 自动追加防火墙必须勾【专用】+【公用】两项的提醒，附 PowerShell 一键修复 `Set-NetConnectionProfile ... NetworkCategory Private`。
+- **`skills/xcmo-mobile/SKILL.md` 加 Windows 章节**：onboarding 段补 "3. Windows 用户额外注意"，写清楚防火墙弹框两项都要勾、否则手机扫码会看到 "connection was lost"。
+
+### Files
+
+- `skills/xcmo-mobile/mobile.py`：加 `check_server_alive()`；`spawn_background_server()` 平台分支 `creationflags` vs `start_new_session`；main `--background` 分支加自检 + 跨平台 stop + Windows 提示 + 失败时 exit 1
+- `skills/xcmo-mobile/SKILL.md`：首次使用段加 "3. Windows 用户额外注意"
+
 ## [4.7.1] - 2026-05-25
 
 ### Fixed - xcmo-mobile 手机分享站 UX 三连修

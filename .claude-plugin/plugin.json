@@ -1,7 +1,7 @@
 {
   "name": "ops-skills",
   "description": "美区 TikTok 矩阵运营 Claude 工具集：(1) 每天自动抓美区 TikTok 热点配 26 数字角色出创意，简报到对话；(2) TK 模板搜索 26 人 × 3 词出 Top 3 模板供运营仿拍，支持两种模式：MVP（WebSearch + yt-dlp，便宜但 24h 不严格）和严格 24h（Playwright 抓 hashtag 页 + ID 解码硬过滤，真实当天数据）；(3) 按邮箱+日期从 xcmo 拉视频按人物分组下载并生成可手机扫码的本地分享站。",
-  "version": "4.7.1",
+  "version": "4.7.2",
   "author": {
     "name": "huanghfzhufeng",
     "url": "https://github.com/huanghfzhufeng"
