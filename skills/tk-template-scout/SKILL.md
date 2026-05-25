@@ -155,13 +155,13 @@ scout.py 用 yt-dlp + `--cookies-from-browser chrome` 抓每个 URL 的真实点
 
 **步骤**：
 
-1. Claude 并行 3 路 WebSearch（同 message 一次发，**v4.6.0 抽象化 query**）：
-   - `TikTok viral non-dance content this week {date} US 2026`
-   - `TikTok non-dance viral {date} cross-niche cultural moment`
-   - `TikTok hottest non-dance trend {date} platform-wide`
+1. Claude 并行 3 路 WebSearch（同 message 一次发，**v4.6.0 中性化 query，不预设答案**）：
+   - `TikTok viral content cross-niche this week {date} US 2026`
+   - `TikTok cross-niche participatory format {date} platform-wide`
+   - `TikTok hottest cultural moment {date} all genres participation`
 
-   **核心锚定**：「**病毒级非舞蹈内容**」（viral non-dance content）。
-   **不要**在 query 里 hardcode 挑战类型（dance/format/meme/skit/POV/ritual）—— 这会把信号空间切碎且 dance 算法权重过高。
+   **核心锚定**：「**cross-niche participatory**」（跨圈层可参与）。
+   **不要**在 query 里 hardcode 挑战类型（dance/non-dance/format/meme/skit/POV/ritual）—— 这都是 hardcode 偏好（包括"非"什么），都会切碎信号空间。让 viral 程度 + 跨圈层 + 仿拍可行性自己说话。
 
 2. Claude 从结果里筛 Top 3 具体可证实的挑战。**筛选标准**：
    - ✅ 保留：有具体名字 + 有玩法 + 跨赛道传播

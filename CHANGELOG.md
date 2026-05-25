@@ -4,6 +4,22 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [4.7.0] - 2026-05-25
+
+### Changed - 中性 query（拔掉最后一层 hardcode 偏好）
+
+- **`us-trend-scout/SKILL.md` Step 3 三路 viral query 去 "non-dance"**：
+  - 旧（v4.6.0）：`TikTok viral non-dance content ...` / `TikTok non-dance viral ...` / `TikTok hottest non-dance trend ...`
+  - 新（v4.7.0）：`TikTok viral content cross-niche ...` / `TikTok cross-niche participatory format ...` / `TikTok hottest cultural moment ... all genres participation`
+  - **理由**：v4.6.0 用 `non-dance` 排除舞蹈，本质上是把"已知答案的反面"当作 query。当周真实数据自证 —— Apple Dance / Espresso Dance 用 grab_viral_challenges.py 跑出的最近样本分别是 51 天 / 475 天前，**它们是真过气，不是被"非舞蹈"过滤掉**。CORTIS Wiggle-Ears 是 K-pop 舞蹈，反而是当周最大 cross-niche moment（180 万赞 6.8 天前）。中性 query + 真实时间窗硬过滤，能让 viral 程度和跨圈层度自己说话。
+- **`tk-template-scout/SKILL.md` Step 0 同步去 "non-dance"**，文案改成 cross-niche participatory 锚定。
+- **新增禁止规则**：在 us-trend-scout 「绝对禁止」清单里加第 4 条 —— "**不要 hardcode '排除' 什么（如 non-dance）→ 这也是预设偏好，是 hardcode 的反向版本**"。
+
+### Verified
+
+- 用 grab_viral_challenges.py 跑 7 个中性候选（含 dance + skit + carousel + 美妆实测），数据自动选出真 viral：CORTIS Wiggle-Ears（K-pop 舞蹈 180 万赞 6.8 天前）、Little Birdie Duo（双人 skit 10.4K 赞 4.3 天前）、Wear Test Beauty（美妆实测 5.7K 赞 6.1 天前）。Apple Dance / Espresso Dance 因 >7 天硬过滤自动 reject。
+- 两份简报（trend + template）端到端跑通并推送双 webhook 验证 `{"StatusCode":0}` success。
+
 ## [4.6.0] - 2026-05-25
 
 ### Added

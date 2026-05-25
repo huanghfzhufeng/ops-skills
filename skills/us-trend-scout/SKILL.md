@@ -58,16 +58,19 @@ Step 5 配对层（具）：基于人设的具体仿拍 brief
 - ❌ 不要 hardcode 例子名（如 `like ice bucket Korean baseball`）→ 引导回声室
 - ❌ 不要 hardcode 产品类型（如 `service treatment` / `product launch`）→ 切碎信号空间
 - ❌ 不要 hardcode 挑战形态（如 `dance / format / meme`）→ 算法权重偏向第一个
+- ❌ **不要 hardcode "排除"什么**（如 `non-dance`）→ 这也是预设偏好，是 hardcode 的反向版本
 
-**只用**：类目 + 时间 + 地区 + 平台 + 抽象趋势词（shift / movement / phenomenon / surge / cultural / behavioral）
+**只用**：类目 + 时间 + 地区 + 平台 + 抽象趋势词（cross-niche / participatory / cultural moment / shift / movement / phenomenon / surge / behavioral）
+
+**v4.6.0 关键修正**：之前用 `non-dance` 排除舞蹈是另一种回声室——把已知答案的反面当作 query。正确做法是**中性 query 让 viral 程度自己排序**，舞蹈和非舞蹈一视同仁，最后看谁真火、谁真跨圈层、谁真能仿。
 
 **8 路 query 模板**（{date} 替换为美东日期 `May 25 2026`）：
 
 ```
-🔥 病毒级非舞蹈内容 / 跨赛道趋势（3 路）：
-1. TikTok viral non-dance content this week {date} US 2026
-2. TikTok non-dance viral {date} cross-niche cultural moment
-3. TikTok hottest non-dance trend {date} platform-wide
+🔥 跨圈层 viral 内容（3 路，中性 query，不预设是否舞蹈）：
+1. TikTok viral content cross-niche this week {date} US 2026
+2. TikTok cross-niche participatory format {date} platform-wide
+3. TikTok hottest cultural moment {date} all genres participation
 
 📊 5 大细分趋势（5 路，只锚类目 + 抽象趋势词）：
 4. US fashion industry shift movement {date} 2026 emerging
@@ -77,9 +80,8 @@ Step 5 配对层（具）：基于人设的具体仿拍 brief
 8. US Gen Z cultural shift {date} 2026 behavioral
 ```
 
-**关键锚定词**："**病毒级非舞蹈内容**"（viral non-dance content）—— 这是唯一锚定，
-不要拆成 "challenge / format / meme / skit / POV / behavioral / ritual" 一堆类型词
-（会把信号空间切碎，且 dance 在搜索引擎里权重过高）。
+**关键锚定词**："**cross-niche participatory**"（跨圈层可参与）—— 让搜索引擎广撒网，
+不预设是否舞蹈 / 是否 skit / 是否 meme。让 grab_viral_challenges.py 用真实点赞 + 时间窗自动排序。
 
 ### Step 4 - 筛热点（v4.6.0：删产品发布，只留趋势级）
 
