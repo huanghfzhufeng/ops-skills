@@ -50,6 +50,23 @@ h1 {
   border-radius: 14px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.04);
   align-items: center;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  border: 1.5px solid transparent;
+  transition: transform 0.15s ease, box-shadow 0.2s ease, border-color 0.15s ease;
+}
+
+@media (hover: hover) {
+  .character-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 122, 255, 0.18);
+    border-color: #007aff;
+  }
+}
+
+.character-card:active {
+  transform: translateY(0);
 }
 
 .character-card .qr {
@@ -65,22 +82,12 @@ h1 {
   font-size: 18px;
   margin-bottom: 4px;
   font-weight: 600;
-}
-
-.character-card h2 a {
-  color: #007aff;
-  text-decoration: none;
+  color: #1d1d1f;
 }
 
 .character-card .count {
-  color: #1d1d1f;
-  font-size: 14px;
-  margin-bottom: 6px;
-}
-
-.character-card .hint {
   color: #6e6e73;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 /* 详情页：视频卡片 */

@@ -4,6 +4,24 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [4.7.1] - 2026-05-25
+
+### Fixed - xcmo-mobile 手机分享站 UX 三连修
+
+- **人物名字按真实 display name 渲染**：之前用 `character_id` slug 当显示名，跟实际人物经常错位 —— `character_id=mia` 实际人物是 `Iris`，`character_id=jake` 实际是 `leo`，`character_id=carlos` 实际是 `ezra`，`character_id=kiki` 实际是 `riley`，等等。改成从 `asset.name` 的 `"<选题> × <人物名>"` 右半部分提取真 display name，HTML（首页卡片 h2、详情页 title/h1）全部用 display name；文件路径继续用 slug 保稳定（视频实际就落在 `videos/<slug>/` 下）。
+- **首页人物卡片整张可点击 + 桌面 hover 提示**：原本只有 `<h2><a>` 一行可点击，且没有视觉提示用户不知道能点。改成整张卡片包 `<a class="character-card">`，桌面 `@media (hover: hover)` 加 `translateY(-2px)` + 蓝色边框 + 深阴影 + `cursor: pointer` 明示可点；移动端用 `@media (hover: hover)` 屏蔽 sticky hover，触屏不沾染。
+- **清掉三处误导文案**：
+  - 首页 footer 删 `"📱 手机扫人物二维码 → 直接看该人物的视频和文案"`（多余说明）和 `"⏹ 电脑终端 Ctrl+C 停服务"`（background 模式 Ctrl+C 根本停不掉，得 `kill <PID>`，文案纯误导）
+  - 人物卡片删 `"📱 手机扫码看 · 💻 点击进入"`（卡片本身已有 hover 视觉提示 + cursor，文案冗余）
+  - 只留真正有用的一行：`"⚠ 手机和电脑必须连同一 WiFi 才能扫码访问"`
+
+### Files
+
+- `skills/xcmo-mobile/mobile.py`：加 `extract_display_name()` + `display_name_for()` 工具函数，`render_character_card` / `render_index` / `render_character_page` 全部接 display_name
+- `skills/xcmo-mobile/templates/index.html`：footer 简化
+- `skills/xcmo-mobile/templates/character.html`：`{{CHARACTER_ID}}` → `{{CHARACTER_DISPLAY}}`（title + h1）
+- `skills/xcmo-mobile/templates/style.css`：`.character-card` 改成 `<a>` 友好样式 + `@media (hover: hover)` 桌面 hover 抬起+边框
+
 ## [4.7.0] - 2026-05-25
 
 ### Changed - 中性 query（拔掉最后一层 hardcode 偏好）

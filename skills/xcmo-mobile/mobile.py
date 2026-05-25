@@ -104,6 +104,28 @@ def safe_character_id(cid: Optional[str]) -> str:
     return sanitize_filename(cid, 40)
 
 
+def extract_display_name(asset_name: Optional[str], fallback: str) -> str:
+    """从 asset.name '<选题模板> × <人物名>' 提取人物 display name。
+
+    xcmo 的 character_id slug 跟实际人物名经常错位（如 character_id='mia'
+    实际人物是 'Iris'），而 asset.name 右边的人物名才是真的。
+    提取失败回退到 fallback（一般是 character_id）。
+    """
+    if not asset_name:
+        return fallback
+    if "×" in asset_name:
+        right = asset_name.rsplit("×", 1)[-1].strip()
+        if right:
+            return right
+    return fallback
+
+
+def display_name_for(assets: list, character_id: str) -> str:
+    """一组 asset 对应同一个人物，取第一个 asset 的 name 提取 display name。"""
+    first_name = assets[0].get("name") if assets else None
+    return extract_display_name(first_name, character_id)
+
+
 def video_filename(asset: dict) -> str:
     """生成本地视频文件名：'{任务名} {asset8}.mp4'。"""
     name = sanitize_filename(asset.get("name") or "video", 60)
@@ -273,17 +295,17 @@ def render_item(asset: dict, character_id: str, index: int) -> str:
 """
 
 
-def render_character_card(character_id: str, count: int) -> str:
-    """渲染首页的人物卡片。"""
+def render_character_card(character_id: str, display_name: str, count: int) -> str:
+    """渲染首页的人物卡片：整张卡片是 <a>，桌面 hover 有抬起+边框提示。"""
     safe_cid = html.escape(character_id)
-    return f"""<div class="character-card">
-  <img class="qr" src="qrcodes/{safe_cid}.png" alt="{safe_cid} QR">
+    safe_display = html.escape(display_name)
+    return f"""<a class="character-card" href="{safe_cid}.html">
+  <img class="qr" src="qrcodes/{safe_cid}.png" alt="{safe_display} QR">
   <div class="info">
-    <h2><a href="{safe_cid}.html">{safe_cid}</a></h2>
+    <h2>{safe_display}</h2>
     <p class="count">{count} 个视频</p>
-    <p class="hint">📱 手机扫码看 · 💻 点击进入</p>
   </div>
-</div>
+</a>
 """
 
 
@@ -291,7 +313,7 @@ def render_index(by_character: dict, email: str, date_range: str) -> str:
     """渲染总览页 HTML。"""
     template = (TEMPLATES_DIR / "index.html").read_text(encoding="utf-8")
     cards = "".join(
-        render_character_card(cid, len(assets))
+        render_character_card(cid, display_name_for(assets, cid), len(assets))
         for cid, assets in sorted(by_character.items(), key=lambda x: -len(x[1]))
     )
     return (
@@ -307,10 +329,11 @@ def render_index(by_character: dict, email: str, date_range: str) -> str:
 def render_character_page(character_id: str, assets: list, email: str, date_range: str) -> str:
     """渲染单个人物详情页 HTML。"""
     template = (TEMPLATES_DIR / "character.html").read_text(encoding="utf-8")
+    display_name = display_name_for(assets, character_id)
     items = "".join(render_item(a, character_id, i) for i, a in enumerate(assets, 1))
     return (
         template
-        .replace("{{CHARACTER_ID}}", html.escape(character_id))
+        .replace("{{CHARACTER_DISPLAY}}", html.escape(display_name))
         .replace("{{EMAIL}}", html.escape(email))
         .replace("{{DATE_RANGE}}", html.escape(date_range))
         .replace("{{COUNT}}", str(len(assets)))
