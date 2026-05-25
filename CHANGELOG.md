@@ -4,6 +4,25 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [4.7.3] - 2026-05-25
+
+### Added - xcmo-mobile `--share` 模式（cloudflared quick tunnel 出公网 URL）
+
+**根本问题**：LAN IP 方案天然只能"自己手机扫自己电脑"。任何"发给别人"的场景都会踩 LAN 隔离的坑 —— 别人不同 WiFi / 公共 WiFi 客户端隔离 / Windows 防火墙 / 截图被压缩 / 电脑休眠 …… 五大失败姿势，单点修补永远修不完。`--share` 模式从根上换掉 base URL，二维码里写 `https://xxx.trycloudflare.com`，不再依赖任何 LAN 假设。
+
+- **新 flag `--share`**：起 `cloudflared tunnel --url http://localhost:<port> --no-autoupdate` 子进程，tail 日志解析 `trycloudflare.com` URL，拿到后用公网 URL 重生 QR + HTML。任何手机任何网络扫都通：4G / 5G / 家里 WiFi / 公司 WiFi / 公共 WiFi 全部 OK，不依赖同 WiFi、不依赖防火墙、不依赖操作系统。
+- **新函数 `spawn_cloudflared_tunnel(port, log_path, timeout)`**：先 `shutil.which("cloudflared")` 检测装没装，没装抛 `RuntimeError` 附跨平台安装命令（brew / winget / debian deb）；起子进程后 tail 日志文件等 URL 出现（cloudflared 启动通常 3-10 秒），60 秒还没拿到就 terminate 子进程并抛错。子进程跟 `spawn_background_server` 共用新提取的 `_platform_detach_kwargs()` 跨平台脱离 console，关掉终端窗口不影响 tunnel。
+- **重构 `render_site_files` 签名**：`lan_ip + port` → `base_url`。让 LAN 模式和 share 模式共用同一个渲染入口，区别只在 `base_url` 是 `http://192.168.x.x:8080` 还是 `https://xxx.trycloudflare.com`。
+- **新 print_box "🌐 公网 tunnel 已启动"**：显示公网 URL + server PID + tunnel PID + 两个日志路径 + 跨平台 stop 命令，并提醒 "trycloudflare URL 临时随机，两个进程一停立刻失效"。
+- **非 share 模式的 box 加一行提示**：底部加 "💡 给别人发链接？跑 --share 用 cloudflared tunnel 出公网 URL"，让用户在 LAN 模式踩坑时知道有解。
+- **SKILL.md 加 onboarding 章节 "给别人发公网链接（--share 模式）"**：列出 LAN 模式的 5 种失败姿势，写清楚 brew / winget / dpkg 三平台装 cloudflared 命令，介绍 quick tunnel 不需要 Cloudflare 账号 / 临时随机域名 / 跑完不留后门，给完整的失败处理表（没装 cloudflared / URL 拿不到 / 本地 server 起不来）。
+- **触发关键词扩展**：「发给别人 / 公网链接 / 远程访问 / 不同 WiFi / 出公网 / 分享给朋友 / tunnel / share」。
+
+### Files
+
+- `skills/xcmo-mobile/mobile.py`：加 `shutil`、`time` import；提取 `_platform_detach_kwargs()`；加 `spawn_cloudflared_tunnel()` + `CLOUDFLARED_INSTALL_HINT` + `CLOUDFLARED_URL_PATTERN`；`render_site_files()` 改用 `base_url`；argparse 加 `--share`；main 加 `--share` 分支（起本地 server + 自检 + 起 cloudflared + 用公网 URL 重生 QR + 浏览器自动打开）
+- `skills/xcmo-mobile/SKILL.md`：Step 2 参数列表加 `--share`；新增「给别人发公网链接（--share 模式）」章节；依赖段补 cloudflared；触发关键词补 share 专属
+
 ## [4.7.2] - 2026-05-25
 
 ### Fixed - xcmo-mobile Windows 兼容性 + 后台 server 健康自检

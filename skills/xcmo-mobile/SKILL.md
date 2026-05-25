@@ -104,6 +104,7 @@ python3 <skill-dir>/mobile.py \
 
 参数：
 - `--background`（**推荐 Claude 默认用**）：后台起服务 + 自动开浏览器 + 立即退出
+- `--share`：**给别人发链接时用**——起 cloudflared quick tunnel，二维码里写公网 `https://xxx.trycloudflare.com`，任何手机任何网络都能扫，不依赖同 WiFi / 不依赖防火墙 / 不依赖操作系统。需先装 `cloudflared`（macOS: `brew install cloudflared`，Windows: `winget install --id Cloudflare.cloudflared`）。详见下文「给别人发公网链接」章节。
 - `--no-serve`：只生成文件不起服务（用户后续手动起）
 - `--refresh-only`：**切换 WiFi 后用**——跳过 API 和视频下载，从本地缓存秒级重生二维码 + HTML。可以和 `--background` 组合（`--refresh-only --background`）
 - `--port 9000`：指定 HTTP 端口（默认 8080，被占用自动找下一个，显式提示「请求 X 用了 Y」）
@@ -212,6 +213,71 @@ p.chmod(0o600)
 - 现代浏览器：`navigator.clipboard.writeText()`
 - HTTP 协议下的 fallback：`document.execCommand('copy')`
 
+## 给别人发公网链接（`--share` 模式）
+
+默认 LAN IP 模式只能"自己手机扫自己电脑"。任何"发给别人"的场景都会踩 LAN 隔离的坑：
+
+- 别人手机和电脑不同 WiFi → 路由不通，Safari 报 `network connection was lost`
+- 公共 WiFi / 公司 WiFi 开了 AP Isolation → 同 SSID 也互相看不到
+- Windows 防火墙挡 Python → 弹框点错一次就全废
+- 截图发别人扫 → 截图被压缩，二维码相机识别不到
+- 别人电脑休眠 → HTTP server 被挂起，:8080 不响应
+
+**`--share` 模式用 [cloudflared quick tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/) 暴露公网 URL**，二维码里写 `https://random-1234.trycloudflare.com/<人物>.html`。任何手机任何网络扫都通，不依赖同 WiFi、不依赖防火墙、不依赖操作系统、不依赖能不能 ping LAN IP。
+
+### 前置：装 cloudflared
+
+```bash
+# macOS
+brew install cloudflared
+
+# Windows
+winget install --id Cloudflare.cloudflared
+
+# Linux (Debian/Ubuntu)
+curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb \
+  -o /tmp/cloudflared.deb && sudo dpkg -i /tmp/cloudflared.deb
+```
+
+不需要 Cloudflare 账号，quick tunnel 是临时随机域名，两个进程一停 URL 立刻失效——跑完不留后门。
+
+### 用法
+
+```bash
+python3 <skill-dir>/mobile.py \
+  --email your-email@example.com \
+  --date 2026-05-22 \
+  --share
+```
+
+或对话里说："**下载 xxx@yyy.com 2026-05-22 的内容，用 --share 出公网链接发给别人**"。
+
+### 行为（与默认模式的差异）
+
+1. 拉数据 + 下载视频（同正常模式）
+2. 起本地 `python -m http.server` 子进程（tunnel 转发的目标）+ 健康自检
+3. 起 `cloudflared tunnel --url http://localhost:<port>` 子进程，tail 日志等 stdout 出现 `https://xxx.trycloudflare.com`（最多 60 秒）
+4. **用公网 tunnel URL 生成 QR + HTML**（与 LAN 模式的区别就在这一步）
+5. 浏览器自动打开公网链接
+6. 输出 box 显示：公网 URL + server PID + tunnel PID + 两个日志路径 + 停止命令
+
+### 停止
+
+```bash
+kill <server_pid> <tunnel_pid>             # macOS / Linux
+taskkill /F /PID <server_pid> <tunnel_pid> # Windows
+```
+
+或者跟 Claude 说"停服务"，让 Claude 帮你 kill 两个 PID。
+
+### 失败处理
+
+| 情况 | 表现 | 处理 |
+|---|---|---|
+| 没装 cloudflared | `❌ 未找到 cloudflared 命令` | 按上方"前置：装 cloudflared"装 |
+| cloudflared 启动 60s 内没拿到 URL | `cloudflared 在 60 秒内没拿到公网 URL` | 看 `_tunnel.log`，可能 Cloudflare 边缘节点抖动，重跑一次 |
+| 本地 server 起不来 | `本地 HTTP server 起不来` | 看 `_server.log`，可能端口被占 / 权限问题 |
+
 ## 错误处理
 
 | 情况 | 处理 |
@@ -240,11 +306,14 @@ p.chmod(0o600)
 
 - Python 3.10+
 - `qrcode` + `pillow`（生成二维码）
-- 标准库：`urllib`, `http.server`, `socket`, `socketserver`, `webbrowser`, `html`
+- 标准库：`urllib`, `http.server`, `socket`, `socketserver`, `webbrowser`, `html`, `shutil`, `time`
+- **可选**：`cloudflared`（仅 `--share` 模式需要）
 
 ## 触发关键词
 
 中文：下载 / 拉 / 导出 / mobile / 手机扫码 / 扫码看  
 英文：mobile share / pull / fetch / download
+
+**`--share` 模式专属触发**（需先装 cloudflared）：发给别人 / 公网链接 / 远程访问 / 不同 WiFi / 出公网 / 分享给朋友 / tunnel / share
 
 通常用户会说邮箱 + 日期，Claude 应识别这种组合直接触发。

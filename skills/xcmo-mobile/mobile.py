@@ -25,10 +25,12 @@ import http.server
 import json
 import os
 import re
+import shutil
 import socket
 import socketserver
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -384,6 +386,18 @@ def check_server_alive(url: str, timeout: float = 3.0) -> bool:
         return False
 
 
+def _platform_detach_kwargs() -> dict:
+    """跨平台让 subprocess 脱离父 console（关掉终端窗口后子进程还能跑）。"""
+    if sys.platform == "win32":
+        return {
+            "creationflags": (
+                subprocess.DETACHED_PROCESS
+                | subprocess.CREATE_NEW_PROCESS_GROUP
+            ),
+        }
+    return {"start_new_session": True}
+
+
 def spawn_background_server(site_dir: Path, port: int) -> int:
     """后台模式：起 `python -m http.server` 子进程，脱离当前 shell。返回 PID。
 
@@ -395,25 +409,80 @@ def spawn_background_server(site_dir: Path, port: int) -> int:
     log_path = site_dir / "_server.log"
     log_fh = open(log_path, "w", encoding="utf-8")
 
-    if sys.platform == "win32":
-        platform_kwargs = {
-            "creationflags": (
-                subprocess.DETACHED_PROCESS
-                | subprocess.CREATE_NEW_PROCESS_GROUP
-            ),
-        }
-    else:
-        platform_kwargs = {"start_new_session": True}
-
     proc = subprocess.Popen(
         [sys.executable, "-m", "http.server", str(port)],
         cwd=str(site_dir),
         stdout=log_fh,
         stderr=subprocess.STDOUT,
         stdin=subprocess.DEVNULL,
-        **platform_kwargs,
+        **_platform_detach_kwargs(),
     )
     return proc.pid
+
+
+CLOUDFLARED_INSTALL_HINT = (
+    "❌ 未找到 cloudflared 命令，先装：\n"
+    "  macOS:   brew install cloudflared\n"
+    "  Windows: winget install --id Cloudflare.cloudflared\n"
+    "  Linux:   见 https://pkg.cloudflare.com（debian/rpm 都有官方包）"
+)
+
+CLOUDFLARED_URL_PATTERN = re.compile(
+    r"(https://[a-z0-9-]+\.trycloudflare\.com)"
+)
+
+
+def spawn_cloudflared_tunnel(
+    port: int, log_path: Path, timeout: float = 60.0,
+) -> tuple[str, int]:
+    """起 `cloudflared tunnel --url http://localhost:<port>` 子进程，解析公网 URL。
+
+    quick tunnel（trycloudflare.com）不需要 Cloudflare 账号，临时随机 URL，
+    子进程退出 URL 即失效。返回 (公网 URL, PID)。
+
+    失败抛 RuntimeError；调用方自己决定是否 sys.exit。
+    """
+    if not shutil.which("cloudflared"):
+        raise RuntimeError(CLOUDFLARED_INSTALL_HINT)
+
+    log_fh = open(log_path, "w", encoding="utf-8")
+    proc = subprocess.Popen(
+        [
+            "cloudflared", "tunnel",
+            "--url", f"http://localhost:{port}",
+            "--no-autoupdate",
+        ],
+        stdout=log_fh,
+        stderr=subprocess.STDOUT,
+        stdin=subprocess.DEVNULL,
+        **_platform_detach_kwargs(),
+    )
+
+    # tail 日志文件等 URL 出现（cloudflared 启动后会打印 trycloudflare.com URL）
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if proc.poll() is not None:
+            raise RuntimeError(
+                f"cloudflared 子进程提前退出（exit code {proc.returncode}），"
+                f"看日志: {log_path}"
+            )
+        try:
+            content = log_path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            content = ""
+        match = CLOUDFLARED_URL_PATTERN.search(content)
+        if match:
+            return match.group(1), proc.pid
+        time.sleep(0.5)
+
+    # 超时：kill 子进程
+    try:
+        proc.terminate()
+    except OSError:
+        pass
+    raise RuntimeError(
+        f"cloudflared 在 {int(timeout)} 秒内没拿到公网 URL，看日志: {log_path}"
+    )
 
 
 def resolve_out_dir(
@@ -505,13 +574,20 @@ def download_all_videos(by_character: dict, videos_dir: Path, session: dict) -> 
 
 def render_site_files(
     by_character: dict, site_dir: Path, qrcodes_dir: Path,
-    email: str, date_range_str: str, lan_ip: str, port: int,
+    email: str, date_range_str: str, base_url: str,
 ) -> None:
-    """生成二维码 PNG + HTML 文件 + CSS。fail-fast：写完立刻校验。"""
+    """生成二维码 PNG + HTML 文件 + CSS。fail-fast：写完立刻校验。
+
+    base_url 是手机扫码后访问的 URL 前缀（不带尾斜杠），可能形如：
+      - http://192.168.2.186:8080    （LAN 模式）
+      - https://xxx.trycloudflare.com（--share tunnel 模式）
+    """
+    base = base_url.rstrip("/")
+
     # 二维码
-    print(f"🔲 生成 {len(by_character)} 个二维码 (URL: http://{lan_ip}:{port}/<人物>.html)...")
+    print(f"🔲 生成 {len(by_character)} 个二维码 (URL: {base}/<人物>.html)...")
     for cid in by_character:
-        url = f"http://{lan_ip}:{port}/{cid}.html"
+        url = f"{base}/{cid}.html"
         img = qrcode.make(url)
         img.save(qrcodes_dir / f"{cid}.png")
 
@@ -561,6 +637,10 @@ def main() -> None:
     parser.add_argument(
         "--refresh-only", action="store_true",
         help="跳过 API 调用 + 视频下载，只用本地缓存重生 HTML+二维码（切 WiFi 后用）",
+    )
+    parser.add_argument(
+        "--share", action="store_true",
+        help="用 cloudflared quick tunnel 暴露公网 URL（任何手机任何网络都能扫，不依赖同 WiFi）。需先装 cloudflared",
     )
     args = parser.parse_args()
 
@@ -624,13 +704,8 @@ def main() -> None:
                 file=sys.stderr,
             )
 
-        # 生成 HTML + 二维码（fail-fast 内部已 stat 检查）
         date_range_str = (
             date_from if date_from == date_to else f"{date_from} ~ {date_to}"
-        )
-        render_site_files(
-            by_character, site_dir, qrcodes_dir,
-            args.email, date_range_str, lan_ip, port,
         )
 
         # 显眼的完成提示
@@ -640,6 +715,68 @@ def main() -> None:
             f"人物: {len(by_character)} 个 · 视频: {sum(len(a) for a in by_character.values())} 个",
             f"目录: {site_dir}",
         ])
+
+        # === --share 模式：起本地 server + cloudflared tunnel，QR 写公网 URL ===
+        if args.share:
+            # 先起本地 server（cloudflared 转发的目标）
+            server_pid = spawn_background_server(site_dir, port)
+            time.sleep(1.5)
+            if not check_server_alive(f"http://localhost:{port}/"):
+                server_log = site_dir / "_server.log"
+                print(
+                    f"❌ 本地 HTTP server 起不来，看日志: {server_log}",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+
+            # 起 cloudflared tunnel 拿公网 URL
+            tunnel_log = site_dir / "_tunnel.log"
+            print(
+                f"⏳ 启动 cloudflared tunnel（log: {tunnel_log}），"
+                "等公网 URL（最多 60 秒）..."
+            )
+            try:
+                tunnel_url, tunnel_pid = spawn_cloudflared_tunnel(
+                    port, tunnel_log, timeout=60.0,
+                )
+            except RuntimeError as e:
+                print(f"\n{e}", file=sys.stderr)
+                sys.exit(1)
+            print(f"✅ 公网 URL: {tunnel_url}")
+
+            # 用公网 URL 生成 QR + HTML
+            render_site_files(
+                by_character, site_dir, qrcodes_dir,
+                args.email, date_range_str, tunnel_url,
+            )
+
+            try:
+                webbrowser.open(tunnel_url)
+            except (webbrowser.Error, OSError):
+                pass
+
+            stop_kill = (
+                "taskkill /F /PID" if sys.platform == "win32" else "kill"
+            )
+            print_box("🌐 公网 tunnel 已启动（浏览器自动打开）", [
+                f"公网 URL:  {tunnel_url}",
+                "👆 任何手机任何网络扫码都能访问（不需要同 WiFi）",
+                "",
+                f"server PID:  {server_pid}   停: {stop_kill} {server_pid}",
+                f"tunnel PID:  {tunnel_pid}   停: {stop_kill} {tunnel_pid}",
+                f"server 日志: {site_dir}/_server.log",
+                f"tunnel 日志: {site_dir}/_tunnel.log",
+                "",
+                "⚠ trycloudflare URL 是临时随机的，两个进程一停 URL 立刻失效",
+            ])
+            return
+
+        # === 非 --share 模式：QR 写 LAN IP，限同 WiFi ===
+        base_url = f"http://{lan_ip}:{port}"
+        render_site_files(
+            by_character, site_dir, qrcodes_dir,
+            args.email, date_range_str, base_url,
+        )
 
         # 起服务（三种模式）
         if args.no_serve:
@@ -652,7 +789,6 @@ def main() -> None:
         if args.background:
             # 后台模式：起子进程 → 自检 → 开浏览器 → 退出（不阻塞 Claude）
             pid = spawn_background_server(site_dir, port)
-            import time
             time.sleep(1.5)  # 给 http.server 一点时间真起来
 
             # 自检：本地 GET 确认 server 在听端口；不通就直接告知子进程没活
@@ -673,7 +809,7 @@ def main() -> None:
 
             box_lines = [
                 f"电脑访问:  http://localhost:{port}",
-                f"手机扫码:  http://{lan_ip}:{port}（同 WiFi）",
+                f"手机扫码:  {base_url}（同 WiFi）",
                 f"PID:      {pid}",
                 f"日志:     {log_path}",
                 f"停止:     {stop_cmd}",
@@ -689,6 +825,7 @@ def main() -> None:
 
             box_lines += [
                 "",
+                "💡 给别人发链接？跑 --share 用 cloudflared tunnel 出公网 URL",
                 "WiFi 换了？跑：mobile.py ... --refresh-only --background",
             ]
 
@@ -709,10 +846,11 @@ def main() -> None:
         # 前台模式：阻塞直到 Ctrl+C（人工跑命令时用）
         print_box("🌐 服务已启动（前台阻塞）", [
             f"电脑访问:  http://localhost:{port}",
-            f"手机扫码:  http://{lan_ip}:{port}（同 WiFi）",
+            f"手机扫码:  {base_url}（同 WiFi）",
             f"端口:     {port}（QR 已写入此端口）",
             "停止:     Ctrl+C",
             "",
+            "💡 给别人发链接？跑 --share 用 cloudflared tunnel 出公网 URL",
             "WiFi 换了？跑：mobile.py ... --refresh-only",
         ])
 
