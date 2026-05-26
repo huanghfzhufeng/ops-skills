@@ -105,7 +105,7 @@ personas:
     template: "幽默 / 男性时尚"
 
   riley:
-    handle: "@riley.fitt"
+    handle: "@riley.fits01"
     track: fashion_beauty
     persona: "布鲁克林古着酷女孩，23 岁设计师"
     template: "ootd + 幽默 / 古着"
@@ -117,7 +117,7 @@ personas:
     template: "健康生活 vlog / 成分党"
 
   leila:
-    handle: "@evelyn.pilates"
+    handle: "@leila.pilates1"
     track: health_fitness
     persona: "波斯系美丽生活主妇，休斯顿 24 岁"
     template: "健康生活 vlog / 普拉提"
@@ -147,13 +147,13 @@ personas:
     template: "ootd + 科技 / AI 工具"
 
   priya:
-    handle: "@priya.setup"
+    handle: "@priya.apps"
     track: tech_ai
     persona: "印度系 hot take queen，SF 23 岁数据科学家"
     template: "ootd + 科技 / hot take"
 
   ro:
-    handle: "@eli.hacks"
+    handle: "@ro.hacks0"
     track: tech_ai
     persona: "硅谷幽默印度 PM，SF 24 岁"
     template: "幽默 + 科技 / 生活 hack"

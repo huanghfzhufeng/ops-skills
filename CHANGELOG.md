@@ -4,6 +4,44 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [4.8.1] - 2026-05-26
+
+### Changed - tier fallback 取代 track 分层（贴回原 spec）
+
+- **`scout_strict.py` 时长过滤改 tier fallback**：原 v4.8.0 按 `track` 字段分（fashion/健身 → ≤30s，段子/科技 → ≤15s），但用户原 spec 是「优先 ≤15s，没有再扩 ≤30s」—— 是 fallback 关系不是分层关系
+  - 删 `TRACK_MAX_DURATION_DEFAULTS` 常量 + `_resolve_max_duration` 函数
+  - 加 `_filter_records()` 抽出单 tier 过滤逻辑（时长 + 竖版 + self-exclude）
+  - `build_report` 改：先尝试 `tight_max=15s`，0 命中才扩 `relaxed_max=30s`
+  - 每 persona 输出 `tier_used`: `tight` / `relaxed` / `none`
+  - CLI 参数 `--max-duration` → `--tight-max` + `--relaxed-max`
+- **`render_briefing.py` 加 tier 标签**：每条视频前缀 `[15s]` 或 `[30s 兜底]`，让运营一眼看出哪条是扩搜的
+- **顶部全局说明改成**：`📏 时长规则：优先 ≤15s [15s]，0 命中时扩到 ≤30s 标 [30s 兜底] | 仅竖版 | 排除自家 26 号`
+
+### Changed - 4 个 handle 修正（xcmo source of truth + TikTok 双重验证）
+
+用 xcmo API（`GET /api/characters`）拿 27 真实 handle + yt-dlp 直接验证账号存在性，修正 4 处错的：
+
+- `priya.handle`: `@priya.setup` ❌（不存在）→ **`@priya.apps`**
+- `riley.handle`: `@riley.fitt` ❌（不存在）→ **`@riley.fits01`**
+- `leila.handle`: `@evelyn.pilates` ❌（旧过期）→ **`@leila.pilates1`**
+- `ro.handle`: `@eli.hacks` ❌（旧过期）→ **`@ro.hacks0`**
+
+修正后 26 yaml handle ↔ xcmo 真实账号 100% 对齐。self-exclude 黑名单也对了，下次再有 `@priya.apps` 视频会被正确过滤掉。
+
+### Changed - us-trend-scout 输出格式固化「带来源链接」
+
+- 之前用户反馈「热点要带链接」没落地到 SKILL.md，下次定时跑可能忘
+- 现在 `Step 6` + `输出格式` + 「文体约束」三处都写死要求：**每条细分趋势必须带 1-2 个权威来源链接（行业报告 / 主流媒体）**，数字 / YoY / 百分比可追溯
+- 简报模板改 3 行结构：① 趋势描述（带 `**加粗**`）② 来源链接行 ③ 人设配对
+
+### Verified - 端到端真跑（5/26）
+
+- `scout_strict.py` 跑出 22/26 命中（v4.7.0 是 14/26）：20 人 `[15s]` + 2 人 `[30s 兜底]` + 4 人 0 命中
+- `grab_viral_challenges.py` 跑出 6 verified + 1 rejected。Top 3 = CORTIS REDRED 96 万赞官方版 1 天前 + DWP2 8.9K 1.6 天前 + Be Her Ella Langley 3K 0.4 天前
+- us-trend-scout 5 路 WebSearch 真跑，简报每类带 2-3 个权威源链接
+- 两份简报推送双 webhook：trend `StatusCode:0` ✅、template card markdown 加粗 / 链接渲染正常
+- 单测 126 全绿
+
 ## [4.8.0] - 2026-05-26
 
 ### Added

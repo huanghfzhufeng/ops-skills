@@ -168,7 +168,7 @@ class TestBuildReport:
         recs = {"sophie": [self._rec(100), self._rec(500), self._rec(200), self._rec(50)]}
         report = scout_strict.build_report(
             cands, recs, top_n=3, min_likes_warn_threshold=500,
-            track_map={}, track_max_duration={},
+            tight_max=999, relaxed_max=999,
         )
         likes = [v["like_count"] for v in report["sophie"]["videos"]]
         assert likes == [500, 200, 100]
@@ -181,7 +181,7 @@ class TestBuildReport:
         recs = {"silver": [self._rec(200)]}
         report = scout_strict.build_report(
             cands, recs, top_n=3, min_likes_warn_threshold=500,
-            track_map={}, track_max_duration={},
+            tight_max=999, relaxed_max=999,
         )
         assert report["silver"]["max_likes"] == 200
         assert report["silver"]["low_heat_warning"] is True
@@ -192,7 +192,7 @@ class TestBuildReport:
         recs: dict[str, list[scout_strict.VideoRecord]] = {}  # 空
         report = scout_strict.build_report(
             cands, recs, top_n=3, min_likes_warn_threshold=500,
-            track_map={}, track_max_duration={},
+            tight_max=999, relaxed_max=999,
         )
         assert "silver" in report
         assert report["silver"]["videos"] == []
@@ -206,7 +206,7 @@ class TestBuildReport:
         recs = {"x": [self._rec(i * 100) for i in range(10)]}
         report = scout_strict.build_report(
             cands, recs, top_n=3, min_likes_warn_threshold=0,
-            track_map={}, track_max_duration={},
+            tight_max=999, relaxed_max=999,
         )
         assert len(report["x"]["videos"]) == 3
         assert [v["like_count"] for v in report["x"]["videos"]] == [900, 800, 700]

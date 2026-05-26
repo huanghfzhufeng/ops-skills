@@ -142,9 +142,10 @@ def format_briefing(
     lines: list[str] = [f"TK模板日推 | {mon}月{day}日（{wd}）", ""]
 
     # v4.6.0：顶部全平台热门挑战 Top 3（Claude 主线填到 data['viral_challenges']）
+    # v4.8.0：用 **markdown 加粗** 让飞书 card 渲染（dump 对话也仍然可读）
     challenges = data.get("viral_challenges") or []
     if challenges:
-        lines.append("🔥 全平台热门挑战 Top 3")
+        lines.append("**🔥 全平台热门挑战 Top 3**")
         lines.append("")
         for i, ch in enumerate(challenges[:3], 1):
             name = ch.get("name", "").strip() or "(挑战名缺失)"
@@ -152,7 +153,7 @@ def format_briefing(
             sample_url = ch.get("sample_url", "").strip()
             sample_likes = ch.get("sample_likes")
             fanpai = ch.get("fanpai_brief", "").strip()
-            lines.append(f"{i}. {name}")
+            lines.append(f"**{i}. {name}**")
             if desc:
                 lines.append(f"   玩法：{desc}")
             if sample_url:
@@ -164,22 +165,14 @@ def format_briefing(
         lines.append("—— 以下为各赛道 Top 1 ——")
         lines.append("")
 
-    # v4.8.0：全局时长分层说明（scout_strict.py 输出 track_max_duration 字段）
-    track_max = data.get("track_max_duration") or {}
-    if track_max:
-        # 把相同时长的 track 合并显示，例：fashion/beauty/健身 ≤30s，段子/科技 ≤15s
-        by_dur: dict[int, list[str]] = {}
-        TRACK_CN = {
-            "fashion_beauty": "穿搭/彩妆",
-            "health_fitness": "健身/健康",
-            "entertainment": "段子/泛娱乐",
-            "tech_ai": "科技/AI",
-        }
-        for t, d in track_max.items():
-            by_dur.setdefault(int(d), []).append(TRACK_CN.get(t, t))
-        parts = [f"{'/'.join(sorted(tracks))} ≤{dur}s"
-                 for dur, tracks in sorted(by_dur.items())]
-        lines.append(f"📏 时长硬过滤：{'，'.join(parts)} | 仅竖版 | 排除自家 26 号")
+    # v4.8.1：tier fallback 全局说明（scout_strict.py 输出 tight/relaxed 双档）
+    tight = data.get("tight_max_seconds")
+    relaxed = data.get("relaxed_max_seconds")
+    if tight and relaxed:
+        lines.append(
+            f"**📏 时长规则**：优先 ≤{tight}s [15s]，0 命中时扩到 ≤{relaxed}s 标 [30s 兜底] "
+            f"| 仅竖版 | 排除自家 26 号"
+        )
         lines.append("")
 
     persona_data = data.get("personas", {})
@@ -189,25 +182,24 @@ def format_briefing(
         handle = pdef.get("handle", f"@{pk}")
         cap = capitalize_persona(pk)
 
-        lines.append(f"{cap} ({handle})")
+        lines.append(f"**{cap} ({handle})**")
         lines.append("")
 
         info = persona_data.get(pk)
         if not info or not info.get("videos"):
-            # v4.8.0：分层时长后用 per-persona max_duration_used 标清楚
-            used = (info or {}).get("max_duration_used") or 15
-            lines.append(f"(24h 内 0 命中 ≤{used}s 竖版模板)")
+            # v4.8.1：tier=none → 两档都没命中
+            lines.append("(24h 内 0 命中 ≤15s / ≤30s 竖版模板)")
         else:
+            # v4.8.1：tier 标签 [15s] / [30s 兜底] 让运营一眼看出哪条是扩搜
+            tier = (info or {}).get("tier_used", "tight")
+            tier_tag = "[15s]" if tier == "tight" else "[30s 兜底]"
             for v in info["videos"]:
-                # v4.5.0：优先用 title_cn（Claude 翻译后写回 JSON），fallback 用 raw title
                 title = clean_title(v.get("title_cn") or v.get("title", ""))
                 likes = fmt_likes(v.get("like_count") or 0)
                 url = v.get("url", "")
-                # v4.6.0：视频时长显示在点赞数后
                 dur = fmt_duration(v.get("duration") or 0)
                 dur_str = f" | {dur}" if dur else ""
-                lines.append(f"{title} | {likes}{dur_str} | {url}")
-                # v4.5.0：如果有 fanpai_brief（Claude 生成的仿拍建议），加一行 →
+                lines.append(f"**{tier_tag}** {title} | {likes}{dur_str} | {url}")
                 brief = (v.get("fanpai_brief") or "").strip()
                 if brief:
                     lines.append(f"→ {brief}")

@@ -137,7 +137,7 @@ class TestFormatBriefing:
         data = {"personas": {}}
         result = render_briefing.format_briefing(data, sample_personas, today=fixed_date)
         assert "Sophie (@sophie.fits2)" in result
-        assert "(24h 内 0 命中 ≤15s 竖版模板)" in result
+        assert "(24h 内 0 命中 ≤15s / ≤30s 竖版模板)" in result
 
     def test_persona_with_videos_shows_three_lines(self, sample_personas, fixed_date) -> None:
         data = {
@@ -293,7 +293,7 @@ class TestFormatBriefing:
         """v4.6.0：0 命中文案改成「24h 内 0 命中 ≤15s 模板」"""
         data = {"personas": {}}
         result = render_briefing.format_briefing(data, sample_personas, today=fixed_date)
-        assert "(24h 内 0 命中 ≤15s 竖版模板)" in result
+        assert "(24h 内 0 命中 ≤15s / ≤30s 竖版模板)" in result
 
     def test_fanpai_brief_empty_no_arrow_line(self, sample_personas, fixed_date) -> None:
         """没有 fanpai_brief 时不要打 → 空行"""
@@ -357,7 +357,7 @@ class TestFormatBriefing:
         ava_pos = result.find("Ava (@ava.glow3)")
         ezra_pos = result.find("Ezra (@ezra.style2)")
         ava_section = result[ava_pos:ezra_pos]
-        assert "(24h 内 0 命中 ≤15s 竖版模板)" in ava_section
+        assert "(24h 内 0 命中 ≤15s / ≤30s 竖版模板)" in ava_section
 
 
 # ---------- 日期 / 星期映射 ----------
