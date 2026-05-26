@@ -105,7 +105,7 @@ personas:
     template: "幽默 / 男性时尚"
 
   riley:
-    handle: "@finn.fits2"
+    handle: "@riley.fitt"
     track: fashion_beauty
     persona: "布鲁克林古着酷女孩，23 岁设计师"
     template: "ootd + 幽默 / 古着"
@@ -147,7 +147,7 @@ personas:
     template: "ootd + 科技 / AI 工具"
 
   priya:
-    handle: "@jake.setup"
+    handle: "@priya.setup"
     track: tech_ai
     persona: "印度系 hot take queen，SF 23 岁数据科学家"
     template: "ootd + 科技 / hot take"

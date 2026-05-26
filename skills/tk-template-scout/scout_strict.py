@@ -87,7 +87,9 @@ class VideoRecord:
     comment_count: int
     timestamp: int        # yt-dlp 拿到的真实值
     source: str           # 候选阶段确定的 source（'search' / 'hashtag' / 'both'）
-    duration: int = 0     # v4.6.0：视频时长（秒），用于 ≤15s 硬过滤；0 = 未知
+    duration: int = 0     # v4.6.0：视频时长（秒），分层硬过滤；0 = 未知
+    width: int = 0        # v4.8.0：用于竖版过滤（height > width = 竖版）
+    height: int = 0       # v4.8.0：用于竖版过滤
 
 
 # ---------- 配置常量 ----------
@@ -98,6 +100,15 @@ DEFAULT_RETRY = 2
 DEFAULT_YT_DLP_PARALLEL = 6
 DEFAULT_ID_VERIFY_SAMPLE = 5
 DEFAULT_MIN_LIKES_WARN = 500
+# v4.8.0：按 personas.yaml 的 track 字段分层硬过滤时长
+# fashion / 健身天然长视频（OOTD / 健身组合），段子 / 科技天然短视频
+TRACK_MAX_DURATION_DEFAULTS: dict[str, int] = {
+    "fashion_beauty": 30,
+    "health_fitness": 30,
+    "entertainment": 15,
+    "tech_ai": 15,
+}
+DEFAULT_FALLBACK_MAX_DURATION = 30  # personas.yaml 缺 track 时的兜底
 PAGE_TIMEOUT_MS = 40_000
 SELECTOR_TIMEOUT_MS = 15_000
 SCROLL_PAUSE_MS = 1_500
@@ -510,6 +521,8 @@ def fetch_metadata(url: str, source: str = "hashtag", browser: str = "chrome",
             timestamp=int(data.get("timestamp") or 0),
             source=source,
             duration=int(data.get("duration") or 0),
+            width=int(data.get("width") or 0),
+            height=int(data.get("height") or 0),
         )
     except (subprocess.TimeoutExpired, json.JSONDecodeError):
         return None
@@ -550,6 +563,52 @@ def fetch_metadata_for_all(
     return dict(records_by_persona), ok, fail
 
 
+# ---------- personas.yaml 加载（v4.8.0：分层时长 + self-exclude） ----------
+
+
+def find_personas_yaml() -> Path | None:
+    """同 render_briefing.find_personas_yaml：优先用户配置 → plugin 自带。"""
+    user_path = Path.home() / ".config" / "ops-skills" / "personas.yaml"
+    if user_path.exists():
+        return user_path
+    here = Path(__file__).resolve().parent
+    plugin_path = here.parent / "us-trend-scout" / "personas.yaml"
+    if plugin_path.exists():
+        return plugin_path
+    return None
+
+
+def load_personas_filter(path: Path | None) -> tuple[dict[str, str], set[str]]:
+    """
+    读 personas.yaml 返回 (persona_key → track, 所有 26 个 handle 集合)。
+
+    handle 已统一去掉前缀 @，方便和 yt-dlp 的 uploader 字段直接比对。
+    找不到文件或解析失败 → 返回空字典/空集，调用方走兜底行为。
+    """
+    if path is None or not path.exists():
+        return {}, set()
+    try:
+        import yaml
+        with path.open(encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+    except Exception as e:  # noqa: BLE001
+        log.warning("load personas.yaml failed: %s", e)
+        return {}, set()
+    personas = data.get("personas", {}) or {}
+    track_map: dict[str, str] = {}
+    handles: set[str] = set()
+    for pk, info in personas.items():
+        track = (info or {}).get("track") or ""
+        if track:
+            track_map[pk] = track
+        raw_handle = (info or {}).get("handle") or ""
+        # 去 @ 前缀，转小写匹配 yt-dlp 的 uploader
+        cleaned = raw_handle.lstrip("@").strip().lower()
+        if cleaned:
+            handles.add(cleaned)
+    return track_map, handles
+
+
 # ---------- 主流程 ----------
 
 
@@ -564,27 +623,68 @@ def load_keywords(path: Path) -> list[tuple[str, str]]:
     return jobs
 
 
+def _resolve_max_duration(
+    persona_key: str,
+    track_map: dict[str, str],
+    track_max_duration: dict[str, int],
+    override: int,
+) -> int:
+    """
+    决定单个 persona 的 max_duration。
+    override > 0 时所有人统一（兼容老用法）；否则按 track 字段查表，缺失走兜底。
+    """
+    if override > 0:
+        return override
+    track = track_map.get(persona_key, "")
+    return track_max_duration.get(track, DEFAULT_FALLBACK_MAX_DURATION)
+
+
 def build_report(
     candidates_by_persona: dict[str, list[VideoCandidate]],
     records_by_persona: dict[str, list[VideoRecord]],
     top_n: int,
     min_likes_warn_threshold: int,
-    max_duration_seconds: int = 0,
+    track_map: dict[str, str],
+    track_max_duration: dict[str, int],
+    duration_override: int = 0,
+    filter_vertical: bool = True,
+    exclude_handles: set[str] | None = None,
 ) -> dict[str, Any]:
     """
-    组装最终输出。保留凑 Top N + 标 low_heat_warning。
-    v4.6.0：max_duration_seconds > 0 时硬过滤掉 duration > max_duration_seconds 的视频。
+    组装最终输出。v4.8.0 改动：
+      - 分层时长硬过滤（按 personas.yaml 的 track 字段查 track_max_duration）
+      - 竖版硬过滤（filter_vertical=True 时排除 height ≤ width 的横版）
+      - self-exclude（uploader 在 exclude_handles 里 → 排除，避免推自家素材）
+      - 每 persona 输出 max_duration_used，让下游简报标清楚阈值
     """
+    exclude_handles = exclude_handles or set()
     per_persona: dict[str, Any] = {}
+
     for persona, records in records_by_persona.items():
-        # v4.6.0 时长硬过滤（在排序之前）
-        if max_duration_seconds > 0:
-            records = [r for r in records if 0 < r.duration <= max_duration_seconds]
-        sorted_recs = sorted(records, key=lambda r: -r.like_count)
+        max_dur = _resolve_max_duration(
+            persona, track_map, track_max_duration, duration_override,
+        )
+        filter_stats = {"dropped_long": 0, "dropped_horizontal": 0, "dropped_self": 0}
+        filtered: list[VideoRecord] = []
+        for r in records:
+            # 1) 时长（duration=0 表示 yt-dlp 没拿到，保守保留）
+            if r.duration > 0 and r.duration > max_dur:
+                filter_stats["dropped_long"] += 1
+                continue
+            # 2) 竖版（width/height=0 表示未知，保守保留）
+            if filter_vertical and r.width > 0 and r.height > 0 and r.height <= r.width:
+                filter_stats["dropped_horizontal"] += 1
+                continue
+            # 3) self-exclude（uploader 小写比对）
+            if exclude_handles and r.uploader.lower() in exclude_handles:
+                filter_stats["dropped_self"] += 1
+                continue
+            filtered.append(r)
+
+        sorted_recs = sorted(filtered, key=lambda r: -r.like_count)
         top = sorted_recs[:top_n]
         max_likes = top[0].like_count if top else 0
         low_heat = max_likes < min_likes_warn_threshold
-        # 候选源分布（search-only / hashtag-only / both 各多少）
         cand_source_breakdown = defaultdict(int)
         for c in candidates_by_persona.get(persona, []):
             cand_source_breakdown[c.source] += 1
@@ -595,9 +695,16 @@ def build_report(
             "fetched_count": len(records),
             "max_likes": max_likes,
             "low_heat_warning": low_heat,
+            "max_duration_used": max_dur,
+            "filter_stats": filter_stats,
         }
+
+    # 兜底：候选有但 yt-dlp 全 fail 的 persona
     for persona in candidates_by_persona:
         if persona not in per_persona:
+            max_dur = _resolve_max_duration(
+                persona, track_map, track_max_duration, duration_override,
+            )
             cand_source_breakdown = defaultdict(int)
             for c in candidates_by_persona[persona]:
                 cand_source_breakdown[c.source] += 1
@@ -608,6 +715,8 @@ def build_report(
                 "fetched_count": 0,
                 "max_likes": 0,
                 "low_heat_warning": True,
+                "max_duration_used": max_dur,
+                "filter_stats": {"dropped_long": 0, "dropped_horizontal": 0, "dropped_self": 0},
             }
     return per_persona
 
@@ -646,12 +755,21 @@ def all_pages_empty_error_message() -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(description="TK Template Scout 严格 24h 模式（双源融合）")
     parser.add_argument("--keywords", required=True, type=Path)
+    parser.add_argument("--personas", type=Path, default=None,
+                        help="personas.yaml 路径（决定 track 分层时长 + self-exclude handle 黑名单）。"
+                             "默认查 ~/.config/ops-skills/personas.yaml → plugin 自带")
     parser.add_argument("--cookies", type=Path, default=Path("/tmp/tiktok-cookies.txt"))
     parser.add_argument("--max-age-hours", type=int, default=24)
     parser.add_argument("--top-n", type=int, default=1,
                         help="每 persona 取 Top N（v4.6.0 默认 1）")
-    parser.add_argument("--max-duration", type=int, default=15,
-                        help="视频最大时长（秒）硬过滤，0 = 不限。v4.6.0 默认 15s")
+    parser.add_argument("--max-duration", type=int, default=0,
+                        help="时长硬过滤覆盖值（秒），0 = 走 personas.yaml track 分层"
+                             "（v4.8.0：fashion_beauty/health_fitness 30s，"
+                             "entertainment/tech_ai 15s）")
+    parser.add_argument("--no-vertical-filter", action="store_true",
+                        help="关闭竖版硬过滤（默认开，只保留 height>width 的视频）")
+    parser.add_argument("--no-self-exclude", action="store_true",
+                        help="关闭自家 26 个 handle 排除（默认开，避免推自家素材）")
     parser.add_argument("--source", choices=sorted(VALID_SOURCES), default="search",
                         help="数据源：search 单源（默认，贴 SKILL 原需求）/ hashtag 单源 / both 双源融合")
     parser.add_argument("--parallel", type=int, default=DEFAULT_PARALLEL)
@@ -687,6 +805,14 @@ def main() -> None:
     # 2. keywords
     keyword_jobs = load_keywords(args.keywords)
     log.info("Loaded %d (persona, keyword) jobs", len(keyword_jobs))
+
+    # 2.5 personas.yaml → track map + self-exclude handle 黑名单（v4.8.0）
+    personas_path = args.personas or find_personas_yaml()
+    track_map, exclude_handles = load_personas_filter(personas_path)
+    if args.no_self_exclude:
+        exclude_handles = set()
+    log.info("Personas loaded: %d with track, %d in exclude list (path=%s)",
+             len(track_map), len(exclude_handles), personas_path)
 
     # 3. Playwright 抓所有
     t0 = time.time()
@@ -727,10 +853,14 @@ def main() -> None:
     log.info("yt-dlp phase done in %.1fs, ok=%d fail=%d",
              time.time() - t1, ok_count, fail_count)
 
-    # 8. 组装输出（v4.6.0：含时长硬过滤）
+    # 8. 组装输出（v4.8.0：分层时长 + 竖版 + self-exclude）
     per_persona = build_report(
         candidates_by_persona, records_by_persona, args.top_n, args.min_likes_warn,
-        max_duration_seconds=args.max_duration,
+        track_map=track_map,
+        track_max_duration=TRACK_MAX_DURATION_DEFAULTS,
+        duration_override=args.max_duration,
+        filter_vertical=not args.no_vertical_filter,
+        exclude_handles=exclude_handles,
     )
 
     # 全局 source 分布
@@ -743,7 +873,10 @@ def main() -> None:
         "mode": f"strict_24h_playwright_source={args.source}",
         "generated_at": int(time.time()),
         "max_age_hours": args.max_age_hours,
-        "max_duration_seconds": args.max_duration,
+        "max_duration_override": args.max_duration,  # 0 = 走分层
+        "track_max_duration": TRACK_MAX_DURATION_DEFAULTS,
+        "filter_vertical": not args.no_vertical_filter,
+        "self_exclude_count": len(exclude_handles),
         "top_n": args.top_n,
         "source_mode": args.source,
         "min_likes_warn_threshold": args.min_likes_warn,

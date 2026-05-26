@@ -4,6 +4,46 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [4.8.0] - 2026-05-26
+
+### Added
+
+- **`skills/tk-template-scout/push_feishu_card.py`**（≈140 行）—— 飞书 **富文本卡片**（interactive markdown）推送脚本，两个 skill 共用。
+  - 第一行 → 卡片 header title（自动选配色：「模板」→ 浅蓝、「热点/趋势」→ 蓝）
+  - 其余 → markdown body，渲染 `**bold**` / `[link](url)` / emoji
+  - **修 v4.6.0 痛点**：纯文本 webhook 不解析 markdown，简报里 `**xxx**` 直接显示成星号
+  - 上限 ~30K 字符（飞书 markdown 元素），单份简报 5-8K 富余
+
+### Changed - 分层时长过滤 + 竖版 + 自家黑名单（scout_strict.py）
+
+- **`scout_strict.py` 时长硬过滤改分层**（v4.6.0 统一 ≤15s 砍掉太多 fashion/健身视频，12/26 人 0 命中）：
+  - `fashion_beauty` + `health_fitness` → **≤30s**
+  - `entertainment` + `tech_ai` → **≤15s**
+  - 走 `personas.yaml` 已有 `track` 字段，零额外配置
+  - `--max-duration N` 仍可覆盖分层（旧用法兼容）
+- **新增竖版硬过滤**：抓 `width`/`height`，默认排除横版（`--no-vertical-filter` 关闭）。避免推荐运营复制不了的横版视频。
+- **新增 self-exclude**：默认排除 `personas.yaml` 里 26 个 handle 的自家素材（`--no-self-exclude` 关闭）。修「Priya 推荐 @priya.apps 自家视频」类问题。
+
+### Changed - 拆 viral 挑战块，去重两份简报
+
+- **`us-trend-scout/SKILL.md`** 8 路 query → **5 路**（删 3 路 cross-niche viral content）；输出格式删「🔥 本周可蹭趋势」段，**简报开头直接进 5 大细分趋势**。理由：viral 挑战 Top 3 由 tk-template-scout 用 `grab_viral_challenges.py` 真实点赞 + 时间窗硬过滤自动选，权威来源在 TK 模板那边；两份简报顶部同步推送同 3 条挑战是冗余。
+
+### Changed - render_briefing.py 标清楚硬过滤阈值
+
+- 简报顶部新增一行 `📏 时长硬过滤：穿搭/彩妆/健身/健康 ≤30s，段子/泛娱乐/科技/AI ≤15s | 仅竖版 | 排除自家 26 号`。让运营一眼看清当前过滤口径。
+- 0 命中提示从 `(24h 内 0 命中 ≤15s 模板)` 改为 `(24h 内 0 命中 ≤Xs 竖版模板)`，X 按 persona track 动态填入。
+
+### Changed - personas.yaml handle 同步真实账号
+
+- `priya.handle`: `@jake.setup` → `@priya.setup`
+- `riley.handle`: `@finn.fits2` → `@riley.fitt`
+- 其余 24 个 handle 等用户提供完整新列表后一次性更新。
+
+### Fixed
+
+- 飞书简报 `**xxx**` 显示成原始星号（plain text webhook 不解析 markdown）→ 改用 interactive card 解决
+- 「前三个热点」两份简报重复（trend Top 3 = template Top 3）→ trend 简报只推 5 大细分趋势
+
 ## [4.7.4] - 2026-05-25
 
 ### Reverted - 撤回 v4.7.3 的 `--share` cloudflared tunnel 模式

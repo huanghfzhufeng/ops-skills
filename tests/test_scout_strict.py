@@ -166,7 +166,10 @@ class TestBuildReport:
     def test_picks_top_n_by_likes(self) -> None:
         cands = {"sophie": [self._cand("1"), self._cand("2"), self._cand("3"), self._cand("4")]}
         recs = {"sophie": [self._rec(100), self._rec(500), self._rec(200), self._rec(50)]}
-        report = scout_strict.build_report(cands, recs, top_n=3, min_likes_warn_threshold=500)
+        report = scout_strict.build_report(
+            cands, recs, top_n=3, min_likes_warn_threshold=500,
+            track_map={}, track_max_duration={},
+        )
         likes = [v["like_count"] for v in report["sophie"]["videos"]]
         assert likes == [500, 200, 100]
         assert report["sophie"]["max_likes"] == 500
@@ -176,7 +179,10 @@ class TestBuildReport:
     def test_low_heat_warning_when_top1_below_threshold(self) -> None:
         cands = {"silver": [self._cand("1")]}
         recs = {"silver": [self._rec(200)]}
-        report = scout_strict.build_report(cands, recs, top_n=3, min_likes_warn_threshold=500)
+        report = scout_strict.build_report(
+            cands, recs, top_n=3, min_likes_warn_threshold=500,
+            track_map={}, track_max_duration={},
+        )
         assert report["silver"]["max_likes"] == 200
         assert report["silver"]["low_heat_warning"] is True
 
@@ -184,7 +190,10 @@ class TestBuildReport:
         # silver 有候选但 yt-dlp 一条没成功
         cands = {"silver": [self._cand("1"), self._cand("2")]}
         recs: dict[str, list[scout_strict.VideoRecord]] = {}  # 空
-        report = scout_strict.build_report(cands, recs, top_n=3, min_likes_warn_threshold=500)
+        report = scout_strict.build_report(
+            cands, recs, top_n=3, min_likes_warn_threshold=500,
+            track_map={}, track_max_duration={},
+        )
         assert "silver" in report
         assert report["silver"]["videos"] == []
         assert report["silver"]["candidates_total"] == 2
@@ -195,7 +204,10 @@ class TestBuildReport:
     def test_top_n_respected_when_more_records(self) -> None:
         cands = {"x": [self._cand(str(i)) for i in range(10)]}
         recs = {"x": [self._rec(i * 100) for i in range(10)]}
-        report = scout_strict.build_report(cands, recs, top_n=3, min_likes_warn_threshold=0)
+        report = scout_strict.build_report(
+            cands, recs, top_n=3, min_likes_warn_threshold=0,
+            track_map={}, track_max_duration={},
+        )
         assert len(report["x"]["videos"]) == 3
         assert [v["like_count"] for v in report["x"]["videos"]] == [900, 800, 700]
 

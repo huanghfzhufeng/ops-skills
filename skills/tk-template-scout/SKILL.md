@@ -254,7 +254,8 @@ feishu_webhook_trend: "https://open.feishu.cn/open-apis/bot/v2/hook/...."
 feishu_webhook_template: "https://open.feishu.cn/open-apis/bot/v2/hook/...."
 ```
 
-tk-template-scout 推 `feishu_webhook_template`：
+tk-template-scout 推 `feishu_webhook_template`（v4.8.0 改用 `push_feishu_card.py`，富文本卡片，
+能渲染 `**加粗**` / 链接 / emoji 标题）：
 
 ```bash
 WEBHOOK=$(grep '^feishu_webhook_template:' ~/.config/ops-skills/tk-template-scout.yaml | sed 's/^feishu_webhook_template: *"\(.*\)"$/\1/')
@@ -262,20 +263,17 @@ WEBHOOK=$(grep '^feishu_webhook_template:' ~/.config/ops-skills/tk-template-scou
 if [ -z "$WEBHOOK" ] || [[ "$WEBHOOK" == *xxxxx* ]]; then
   echo "skip 飞书推送：webhook 未配置"
 else
-  python3 -c "
-import json, sys
-text = open('briefing.txt').read()
-print(json.dumps({'msg_type': 'text', 'content': {'text': text}}, ensure_ascii=False))
-  " > briefing.json
-
-  RESPONSE=$(curl -sS -X POST "$WEBHOOK" \
-    -H "Content-Type: application/json" \
-    -d @briefing.json)
-  echo "飞书推送响应：$RESPONSE"
+  python3 <skill-dir>/push_feishu_card.py \
+    --briefing briefing.txt \
+    --webhook "$WEBHOOK"
 fi
 ```
 
-webhook 返回非 success → 把 response body dump 给用户，简报继续 dump 对话。
+`push_feishu_card.py` 行为：
+- 简报第一行 → 卡片 header title（自动选配色，「模板」→ 浅蓝、「热点/趋势」→ 蓝）
+- 其余 → markdown body（飞书 markdown 元素，支持 `**bold**` / `[link](url)`）
+- 返回非 `code:0` → 退出码 1 + dump 飞书响应到 stderr
+
 us-trend-scout 用 `feishu_webhook_trend` 同套路推（见 us-trend-scout/SKILL.md）。
 
 ### Step 8 - 输出 + 报告

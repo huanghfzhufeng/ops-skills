@@ -1,6 +1,6 @@
 ---
 name: us-trend-scout
-description: 美区 TikTok 热点抓取 + 26 数字角色创意配对。每天用 6 路并行 web search 抓美区前一天热点（健康/美妆/健身/科技 + 平台格式 + 文化情绪），筛 5-8 条配对 26 个数字角色出具体创意，加平台格式趋势 + 文化情绪，输出中文纯文本简报到对话，v4.5.0 起同时推送飞书（feishu_webhook_trend）。触发：用户说"热点日报"、"美区热点"、"us trend"、"trend scout"、"跑一次热点"，或被 /schedule 定时触发。
+description: 美区 TikTok 热点抓取 + 26 数字角色创意配对。每天用 5 路并行 web search 抓美区前一天 5 大细分趋势（时尚/美妆/健康/科技/文化），筛 5 条配对 26 个数字角色出具体创意，加文化情绪总结，输出中文纯文本简报到对话，推送飞书（feishu_webhook_trend，富文本卡片）。v4.8.0 起 viral 挑战 Top 3 迁移到 tk-template-scout 避免重复。触发：用户说"热点日报"、"美区热点"、"us trend"、"trend scout"、"跑一次热点"，或被 /schedule 定时触发。
 ---
 
 # US Trend Scout
@@ -41,7 +41,7 @@ USER_PERSONAS="$HOME/.config/ops-skills/personas.yaml"
 
 用 Bash `date` 拿当前北京时间。美东日期 = 北京日期 - 1（早 9 点北京 = 美东前一天晚上 8-9 点）。简报日期格式："5月20日（周三）"。
 
-### Step 3 - 并行 8 路 WebSearch（v4.6.0：抽象化 query，不 hardcode 名词）
+### Step 3 - 并行 5 路 WebSearch（v4.8.0：去重 viral 挑战块，迁移到 tk-template-scout）
 
 **核心原则（v4.6.0 关键修正）**：query 是渔网不是刀。**广 → 严 → 具**三层漏斗：
 
@@ -64,50 +64,27 @@ Step 5 配对层（具）：基于人设的具体仿拍 brief
 
 **v4.6.0 关键修正**：之前用 `non-dance` 排除舞蹈是另一种回声室——把已知答案的反面当作 query。正确做法是**中性 query 让 viral 程度自己排序**，舞蹈和非舞蹈一视同仁，最后看谁真火、谁真跨圈层、谁真能仿。
 
-**8 路 query 模板**（{date} 替换为美东日期 `May 25 2026`）：
+**5 路 query 模板**（{date} 替换为美东日期 `May 25 2026`）：
 
 ```
-🔥 跨圈层 viral 内容（3 路，中性 query，不预设是否舞蹈）：
-1. TikTok viral content cross-niche this week {date} US 2026
-2. TikTok cross-niche participatory format {date} platform-wide
-3. TikTok hottest cultural moment {date} all genres participation
-
 📊 5 大细分趋势（5 路，只锚类目 + 抽象趋势词）：
-4. US fashion industry shift movement {date} 2026 emerging
-5. US beauty industry trend movement {date} 2026 YoY surge
-6. US health wellness habit shift {date} 2026 viral movement
-7. US tech industry structural shift {date} 2026 workforce
-8. US Gen Z cultural shift {date} 2026 behavioral
+1. US fashion industry shift movement {date} 2026 emerging
+2. US beauty industry trend movement {date} 2026 YoY surge
+3. US health wellness habit shift {date} 2026 viral movement
+4. US tech industry structural shift {date} 2026 workforce
+5. US Gen Z cultural shift {date} 2026 behavioral
 ```
 
-**关键锚定词**："**cross-niche participatory**"（跨圈层可参与）—— 让搜索引擎广撒网，
-不预设是否舞蹈 / 是否 skit / 是否 meme。让 grab_viral_challenges.py 用真实点赞 + 时间窗自动排序。
+**v4.8.0 关键变更**：原 Step 3 第 1-3 路（viral 挑战 cross-niche）已迁移到 `tk-template-scout/SKILL.md` Step 0，由 grab_viral_challenges.py 用真实点赞 + 时间窗硬过滤自动排序。**两个 skill 同一天跑，挑战块只在 TK 模板日推出现，避免重复**。本 skill 只保留 5 大细分趋势 + 文化情绪。
 
-### Step 4 - 筛热点（v4.6.0：删产品发布，只留趋势级）
-
-**两类硬筛**：
-
-#### A. 本周可蹭趋势（3-5 条，从 query 1/2 找）
-
-跨赛道传播的 viral phenomenon / format / movement。**有具体玩法、有具体名字、26 人都能蹭**。
-- ✅ 保留：现象级挑战（如"冰桶挑战"、"韩国棒球应援"）、格式名（如"Hold the moan"、"And Emily that's all"）、sound trend
-- ❌ 排除：单品测评、新产品发布
-
-每条格式：
-```
-[挑战 / 格式名] (英文原名)
-玩法：1-2 句描述怎么玩
-人设配对：A / B / C（适配的 persona，逗号分隔）
-```
-
-#### B. 5 大细分趋势（每类 1 条，共 5 条）
+### Step 4 - 筛热点（v4.8.0：只保留 5 大细分趋势，挑战已迁移到 tk-template-scout）
 
 ```
-👗 时尚 → query 5
-💄 美妆 → query 6
-💪 健康 → query 7
-📱 科技 → query 8（行业 + AI + 大事件）
-🌊 文化 → query 3
+👗 时尚 → query 1
+💄 美妆 → query 2
+💪 健康 → query 3
+📱 科技 → query 4（行业 + AI + 大事件）
+🌊 文化 → query 5
 ```
 
 每类只挑**最具趋势性**的 1 条。**筛选标准**：
@@ -139,14 +116,15 @@ Step 5 配对层（具）：基于人设的具体仿拍 brief
 
 确保 26 个角色在简报里有合理覆盖度（不要 5 条都配同一个 Caden）。
 
-### Step 6 - 拼简报（v4.6.0：可蹭趋势前置）
+### Step 6 - 拼简报（v4.8.0：5 大细分趋势 + 文化情绪）
 
 按下方"输出格式"，**纯文本，无 markdown 符号**。
 
 **关键顺序**：
-1. **可蹭趋势 3-5 条**（最前面，最重要）
-2. **5 大细分趋势**（时尚 / 美妆 / 健康 / 科技 / 文化）
-3. **文化情绪**（1 段底层观察）
+1. **5 大细分趋势**（时尚 / 美妆 / 健康 / 科技 / 文化，每类 1 条）
+2. **文化情绪**（1 段底层观察）
+
+注：viral 挑战 Top 3 由 tk-template-scout 推到 template webhook，本 skill 不再输出避免重复。
 
 ### Step 7.5 - 推飞书（v4.5.0 复活）
 
@@ -157,7 +135,8 @@ feishu_webhook_trend: "https://open.feishu.cn/open-apis/bot/v2/hook/...."
 feishu_webhook_template: "https://open.feishu.cn/open-apis/bot/v2/hook/...."
 ```
 
-us-trend-scout 推 `feishu_webhook_trend`：
+us-trend-scout 推 `feishu_webhook_trend`（v4.8.0 改用 `push_feishu_card.py`，富文本卡片，
+能渲染 `**加粗**` / 链接 / emoji 标题，**这是修 v4.6.0 飞书显示 `**xxx**` 没加粗的方案**）：
 
 ```bash
 WEBHOOK=$(grep '^feishu_webhook_trend:' ~/.config/ops-skills/tk-template-scout.yaml | sed 's/^feishu_webhook_trend: *"\(.*\)"$/\1/')
@@ -165,20 +144,14 @@ WEBHOOK=$(grep '^feishu_webhook_trend:' ~/.config/ops-skills/tk-template-scout.y
 if [ -z "$WEBHOOK" ] || [[ "$WEBHOOK" == *xxxxx* ]]; then
   echo "skip 飞书推送：webhook_trend 未配置"
 else
-  python3 -c "
-import json
-text = open('briefing.txt').read()
-print(json.dumps({'msg_type': 'text', 'content': {'text': text}}, ensure_ascii=False))
-  " > briefing.json
-
-  RESPONSE=$(curl -sS -X POST "$WEBHOOK" \
-    -H "Content-Type: application/json" \
-    -d @briefing.json)
-  echo "飞书推送响应：$RESPONSE"
+  # 共用 tk-template-scout 目录下的 push_feishu_card.py
+  python3 <plugin-root>/skills/tk-template-scout/push_feishu_card.py \
+    --briefing briefing.txt \
+    --webhook "$WEBHOOK"
 fi
 ```
 
-webhook 返回非 success → 把 response body dump 给用户，简报继续 dump 对话。
+返回非 `code:0` → 退出码 1，简报继续 dump 对话。
 
 ### Step 8 - 输出 + 报告
 
@@ -191,22 +164,10 @@ webhook 返回非 success → 把 response body dump 给用户，简报继续 du
 
 ---
 
-## 输出格式（v4.6.0：可蹭趋势前置 + 5 类细分）
+## 输出格式（v4.8.0：5 类细分 + 文化情绪，无 viral 挑战块）
 
 ```
 美区热点日报 | 5月20日（周三）
-
-🔥 本周可蹭趋势
-
-1. "Hold the moan" (憋反应对比格式)
-玩法：先正式场合表情，再切换私下真实情绪反应，1-2 秒强对比
-人设配对：Iris 拍"四大审计姐 partner 面前 vs 桌底"，Caden 拍"高中老师面前 vs 走廊"
-
-2. "韩国棒球应援" (K-pop 风潮 + 观众席手势文化)
-玩法：手指挥应援棒做心形 / 比心动作，配 K-pop 主题音乐
-人设配对：Nari、Eleanor、Kai
-
-（重复 3-5 条可蹭趋势）
 
 📊 细分趋势
 
@@ -234,7 +195,7 @@ Meta / Anthropic / 微软 5 月集体 AI 裁员潮
 Gen Z 在"想 IRL 但又离不开 feed"的撕裂里，反 polished 创作者，对小博主真实感的信任度反超大品牌。
 ```
 
-**赛道 emoji**：🔥 可蹭趋势 / 👗 时尚 / 💄 美妆 / 💪 健康 / 📱 科技 / 🌊 文化
+**赛道 emoji**：👗 时尚 / 💄 美妆 / 💪 健康 / 📱 科技 / 🌊 文化
 
 ## 文体约束
 

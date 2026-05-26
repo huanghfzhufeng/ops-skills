@@ -164,6 +164,24 @@ def format_briefing(
         lines.append("—— 以下为各赛道 Top 1 ——")
         lines.append("")
 
+    # v4.8.0：全局时长分层说明（scout_strict.py 输出 track_max_duration 字段）
+    track_max = data.get("track_max_duration") or {}
+    if track_max:
+        # 把相同时长的 track 合并显示，例：fashion/beauty/健身 ≤30s，段子/科技 ≤15s
+        by_dur: dict[int, list[str]] = {}
+        TRACK_CN = {
+            "fashion_beauty": "穿搭/彩妆",
+            "health_fitness": "健身/健康",
+            "entertainment": "段子/泛娱乐",
+            "tech_ai": "科技/AI",
+        }
+        for t, d in track_max.items():
+            by_dur.setdefault(int(d), []).append(TRACK_CN.get(t, t))
+        parts = [f"{'/'.join(sorted(tracks))} ≤{dur}s"
+                 for dur, tracks in sorted(by_dur.items())]
+        lines.append(f"📏 时长硬过滤：{'，'.join(parts)} | 仅竖版 | 排除自家 26 号")
+        lines.append("")
+
     persona_data = data.get("personas", {})
 
     for pk in DISPLAY_ORDER:
@@ -176,7 +194,9 @@ def format_briefing(
 
         info = persona_data.get(pk)
         if not info or not info.get("videos"):
-            lines.append("(24h 内 0 命中 ≤15s 模板)")
+            # v4.8.0：分层时长后用 per-persona max_duration_used 标清楚
+            used = (info or {}).get("max_duration_used") or 15
+            lines.append(f"(24h 内 0 命中 ≤{used}s 竖版模板)")
         else:
             for v in info["videos"]:
                 # v4.5.0：优先用 title_cn（Claude 翻译后写回 JSON），fallback 用 raw title
