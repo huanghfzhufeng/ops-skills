@@ -25,16 +25,18 @@ import http.server
 import json
 import os
 import re
+import signal
 import socket
 import socketserver
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 import webbrowser
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -80,6 +82,7 @@ def parse_date_range(date_arg: str) -> tuple[str, str]:
     """解析日期参数为 (date_from, date_to) 元组。
 
     支持单日 '2026-05-22' 或区间 '2026-05-21~2026-05-22'。
+    用户输入按**本机时区**解释（自动检测，例如国内 +8 即北京时间）。
     """
     date_arg = date_arg.strip()
     for sep in ("~", "to", " - "):
@@ -88,6 +91,52 @@ def parse_date_range(date_arg: str) -> tuple[str, str]:
             return normalize_date(parts[0]), normalize_date(parts[1])
     d = normalize_date(date_arg)
     return d, d
+
+
+def _local_tz():
+    """检测本机时区（用 datetime.astimezone() 默认行为拿系统 UTC offset）。"""
+    return datetime.now().astimezone().tzinfo
+
+
+def utc_query_range_for_local_dates(
+    local_from: str, local_to: str,
+) -> tuple[str, str]:
+    """把本机时区的日期范围 [from, to] 转 UTC 日期范围（外扩到覆盖本地全天）。
+
+    xcmo /api/tasks 的 date_from/to 按 UTC 解释。用户传的是本机时区日期
+    （如北京时间），若直接传给 API 会漏掉本机时区凌晨 0-8 点的 task
+    （它们落在 UTC 前一天 16-24 点）。所以查询时外扩到本机时区当天的
+    完整 UTC 覆盖窗口，再用 task_in_local_date_range 客户端精筛。
+
+    例：北京 2026-05-26 全天 = UTC 2026-05-25 16:00 ~ 2026-05-26 16:00，
+    API 要查 UTC '2026-05-25' 和 '2026-05-26' 两天。
+    """
+    tz = _local_tz()
+    start_local = datetime.strptime(local_from, "%Y-%m-%d").replace(tzinfo=tz)
+    end_local = (
+        datetime.strptime(local_to, "%Y-%m-%d")
+        .replace(hour=23, minute=59, second=59, tzinfo=tz)
+    )
+    utc_from = start_local.astimezone(timezone.utc).date().isoformat()
+    utc_to = end_local.astimezone(timezone.utc).date().isoformat()
+    return utc_from, utc_to
+
+
+def task_in_local_date_range(
+    task: dict, local_from: str, local_to: str,
+) -> bool:
+    """task.created_at（API 返回的 UTC naive 字符串）转本机时区后
+    判断是否在 [local_from, local_to] 内（inclusive）。
+    """
+    cat = task.get("created_at")
+    if not cat:
+        return False
+    try:
+        dt_utc = datetime.fromisoformat(cat).replace(tzinfo=timezone.utc)
+    except ValueError:
+        return False
+    dt_local_date = dt_utc.astimezone(_local_tz()).date().isoformat()
+    return local_from <= dt_local_date <= local_to
 
 
 def sanitize_filename(name: str, max_len: int = 50) -> str:
@@ -384,6 +433,92 @@ def check_server_alive(url: str, timeout: float = 3.0) -> bool:
         return False
 
 
+# 全局 PID 文件：记录最近一次 spawn 的 http.server PID。
+# 下次 mobile.py 启动时读这个文件，先 kill 旧 server 避免端口/进程残留。
+SERVER_PID_FILE = Path.home() / ".claude/cache/xcmo-mobile/server.pid"
+
+
+def _pid_alive(pid: int) -> bool:
+    """检测进程是否存活（跨平台）。"""
+    if sys.platform == "win32":
+        try:
+            result = subprocess.run(
+                ["tasklist", "/FI", f"PID eq {pid}", "/NH"],
+                capture_output=True, text=True, timeout=3,
+            )
+            return str(pid) in (result.stdout or "")
+        except (subprocess.SubprocessError, OSError):
+            return False
+    try:
+        os.kill(pid, 0)  # signal 0 不发信号，仅测存活
+        return True
+    except OSError:
+        return False
+
+
+def _is_our_http_server(pid: int) -> bool:
+    """验证 pid 对应进程是 `python -m http.server`，避免误杀别的 Python 进程。"""
+    if sys.platform == "win32":
+        try:
+            result = subprocess.run(
+                ["wmic", "process", "where", f"processid={pid}",
+                 "get", "commandline", "/format:value"],
+                capture_output=True, text=True, timeout=3,
+            )
+            return "http.server" in (result.stdout or "")
+        except (subprocess.SubprocessError, OSError):
+            return False
+    try:
+        result = subprocess.run(
+            ["ps", "-p", str(pid), "-o", "command="],
+            capture_output=True, text=True, timeout=3,
+        )
+        return "http.server" in (result.stdout or "")
+    except (subprocess.SubprocessError, OSError):
+        return False
+
+
+def _kill_pid(pid: int) -> None:
+    """跨平台 kill：先 SIGTERM 给 0.5s 优雅退出，还活着再 SIGKILL。"""
+    if sys.platform == "win32":
+        subprocess.run(
+            ["taskkill", "/F", "/PID", str(pid)],
+            capture_output=True, timeout=5,
+        )
+        return
+    try:
+        os.kill(pid, signal.SIGTERM)
+        time.sleep(0.5)
+        if _pid_alive(pid):
+            os.kill(pid, signal.SIGKILL)
+    except OSError:
+        pass
+
+
+def kill_stale_server() -> Optional[int]:
+    """读全局 PID 文件，如果上次 spawn 的 server 还活着且确实是 http.server
+    就 kill 它。返回被 kill 的 PID 或 None（没文件 / 进程已死 / 不是我们的）。
+    """
+    if not SERVER_PID_FILE.exists():
+        return None
+    try:
+        old_pid = int(SERVER_PID_FILE.read_text().strip())
+    except (ValueError, OSError):
+        return None
+    if not _pid_alive(old_pid):
+        return None
+    if not _is_our_http_server(old_pid):
+        return None  # PID 复用给别的进程了，跳过
+    _kill_pid(old_pid)
+    return old_pid
+
+
+def write_server_pid(pid: int) -> None:
+    """写当前 server PID 到全局 PID 文件，供下次 kill_stale_server 用。"""
+    SERVER_PID_FILE.parent.mkdir(parents=True, exist_ok=True)
+    SERVER_PID_FILE.write_text(str(pid))
+
+
 def spawn_background_server(site_dir: Path, port: int) -> int:
     """后台模式：起 `python -m http.server` 子进程，脱离当前 shell。返回 PID。
 
@@ -391,6 +526,10 @@ def spawn_background_server(site_dir: Path, port: int) -> int:
     - POSIX (macOS/Linux): start_new_session=True 调 setsid 脱离会话
     - Windows: DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP 脱离 console
       （Windows 上 start_new_session 会被静默忽略 —— 必须显式给 creationflags）
+
+    新 PID 写到 SERVER_PID_FILE 供下次启动时 kill_stale_server() 识别。
+    （kill 旧 server 的逻辑在 main 早期做，不在这里 —— 那样 find_free_port
+    时 8080 已经释放，能复用同一端口）
     """
     log_path = site_dir / "_server.log"
     log_fh = open(log_path, "w", encoding="utf-8")
@@ -413,6 +552,7 @@ def spawn_background_server(site_dir: Path, port: int) -> int:
         stdin=subprocess.DEVNULL,
         **platform_kwargs,
     )
+    write_server_pid(proc.pid)
     return proc.pid
 
 
@@ -444,18 +584,31 @@ def fetch_by_character(
     print(f"🎯 目标用户: {args_email} → {target_user_id[:8]}")
 
     # Step 3: 拉 task 列表
-    print(f"📅 日期范围: {date_from} ~ {date_to}")
+    # 用户传的日期是本机时区；xcmo API 走 UTC。把本机时区范围外扩到 UTC
+    # 覆盖窗口去查，再客户端按本机时区精筛 —— 这样不会漏本机时区凌晨
+    # 的 task（它们 created_at 落在 UTC 前一天）。
+    utc_from, utc_to = utc_query_range_for_local_dates(date_from, date_to)
+    tz_name = datetime.now().astimezone().tzname() or "本机时区"
+    print(
+        f"📅 日期范围: {date_from} ~ {date_to}（{tz_name}，"
+        f"UTC 查询窗口 {utc_from}~{utc_to}）"
+    )
     tasks_url = (
         f"{XCMO_BASE}/api/tasks"
-        f"?date_from={date_from}&date_to={date_to}"
+        f"?date_from={utc_from}&date_to={utc_to}"
         f"&submitted_by_user_id={target_user_id}&limit=500"
     )
-    tasks = http_get_json(tasks_url, session)
+    tasks_raw = http_get_json(tasks_url, session)
+    # 客户端按本机时区精筛
+    tasks = [t for t in tasks_raw if task_in_local_date_range(t, date_from, date_to)]
     completed = [
         t for t in tasks
         if t.get("status") == "completed" and (t.get("result") or {}).get("asset_id")
     ]
-    print(f"📊 task: 共 {len(tasks)} 个，completed 且有 asset = {len(completed)}")
+    print(
+        f"📊 task: API 拉回 {len(tasks_raw)} 个 → 本机时区筛剩 {len(tasks)} 个 → "
+        f"completed 且有 asset = {len(completed)}"
+    )
 
     if not completed:
         return {}
@@ -572,6 +725,12 @@ def main() -> None:
     cache_path = site_dir / CACHE_FILE_NAME
 
     try:
+        # 早点 kill 上次 mobile.py 起的 server（如果还在跑），避免端口占用 +
+        # 进程残留。在 find_free_port 之前 kill 才能复用 8080 端口。
+        stale = kill_stale_server()
+        if stale is not None:
+            print(f"♻ 已 kill 上次的 server PID {stale}")
+
         # 决定数据来源：refresh-only 走缓存，否则跑 API
         if args.refresh_only:
             if not cache_path.exists():
@@ -652,7 +811,6 @@ def main() -> None:
         if args.background:
             # 后台模式：起子进程 → 自检 → 开浏览器 → 退出（不阻塞 Claude）
             pid = spawn_background_server(site_dir, port)
-            import time
             time.sleep(1.5)  # 给 http.server 一点时间真起来
 
             # 自检：本地 GET 确认 server 在听端口；不通就直接告知子进程没活

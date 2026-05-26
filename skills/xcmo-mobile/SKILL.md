@@ -78,6 +78,7 @@ your-email@example.com 2026-05-22
 
 - `email`：必填，格式 `xxx@yyy.zzz`
 - `date`：必填，支持 `2026-05-22` / `20260522` / `2026-05-21~2026-05-22`（区间）
+- `date` 按**本机时区**解释（脚本自动检测系统 UTC offset；国内即北京时间 +8）。xcmo API 自身走 UTC，mobile.py 会自动把本机时区日期扩展到 UTC 查询窗口、再客户端精筛，保证不漏本机时区凌晨生成的 task。
 
 **无法解析时回问用户**，不要瞎猜。
 
@@ -125,7 +126,8 @@ python3 <skill-dir>/mobile.py \
 
 ### Step 3 - 报告
 
-`--background` 模式下，mobile.py 跑完立刻退出，已经做了 3 件事：
+`--background` 模式下，mobile.py 跑完立刻退出，已经做了 4 件事：
+- ✅ **自动 kill 上次 mobile.py 起的 server**（读 `~/.claude/cache/xcmo-mobile/server.pid`，验证是 python -m http.server 才 kill，跨平台），输出 `♻ 已 kill 上次的 server PID <pid>`。这样反复跑 mobile.py 不会留一堆 zombie 进程占端口。
 - ✅ 子进程后台跑 http.server
 - ✅ 浏览器自动打开了
 - ✅ box 输出印了 URL + PID
@@ -224,6 +226,8 @@ p.chmod(0o600)
 | 某个视频下载失败 | 重试 1 次，仍失败 → 跳过（html 里仍写文案/标签）|
 | 端口被占用 | 自动找 8080..8090 区间内的空闲端口，**显式打印「请求 X 用了 Y」**，避免用户搞混 |
 | WiFi 切换 / IP 变化 | 旧二维码失效，告诉用户跑 `--refresh-only` 用本地缓存秒级重生 |
+| 多次运行 mobile.py | 自动 kill 上次的 http.server 进程（凭 `~/.claude/cache/xcmo-mobile/server.pid`），端口能复用 8080 |
+| 时区错位（漏拉本机凌晨 task）| mobile.py v4.7.5+ 自动按本机时区扩展查询窗口，不会漏 |
 | HTML 写入失败（disk full / 权限）| 立刻 RuntimeError + 非 0 退出，不会静默成功 |
 
 ## 退出码

@@ -4,6 +4,42 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [4.8.2] - 2026-05-26
+
+### Fixed - 两个真 bug：时区错位漏 task + 反复运行进程残留
+
+- **`--date` 按本机时区解释（修时区漏 task bug）**：xcmo `/api/tasks` 的 `date_from/date_to` 走 UTC，但用户传的 `--date 2026-05-26` 是本机时区（北京时间）。之前直接把用户日期拼到 API query 里，**漏掉本机时区凌晨 0:00–8:00 的 task**（它们对应 UTC 前一天 16:00–24:00）。luyuyue 5.26 实测：API 直接查 UTC 2026-05-26 只拉到 15 条，按北京时间扩展 UTC 查询窗口 + 客户端精筛后拉到 20 个人物 / 23 个 pipeline 视频，跟用户在 xcmo 平台看到的"20 个人物"一致。
+  - 新增 `_local_tz()` 检测本机时区（`datetime.now().astimezone().tzinfo`）
+  - 新增 `utc_query_range_for_local_dates(local_from, local_to)` —— 把本机时区日期范围转成 UTC 查询窗口（外扩到覆盖本机全天）
+  - 新增 `task_in_local_date_range(task, local_from, local_to)` —— 把 task.created_at（UTC naive）转本机时区精筛
+  - `fetch_by_character()` 走"先 UTC 外扩查询 → 客户端按本机时区筛"两步法
+  - 输出多一行 `📅 日期范围: 2026-05-26 ~ 2026-05-26（CST，UTC 查询窗口 2026-05-25~2026-05-26）`，明确本机时区和实际 API 查询窗口
+
+- **反复跑 mobile.py 自动 kill 上次 server（修进程残留 bug）**：之前每次 `--background` 都新起一个 `python -m http.server`，旧的不死、占着 8080，新的只能 fallback 到 8081/8082……累计跑 N 次留 N 个 zombie。
+  - 新增 `SERVER_PID_FILE = ~/.claude/cache/xcmo-mobile/server.pid` 全局记录最新 server PID
+  - 新增 `_pid_alive(pid)` / `_is_our_http_server(pid)` / `_kill_pid(pid)` —— 跨平台 (macOS/Linux/Windows) 进程存活检测 + 命令行 fingerprint 验证（避免误杀别的 Python） + SIGTERM→SIGKILL kill
+  - 新增 `kill_stale_server()` —— 读 PID 文件，验证存活 + 是 http.server 后才 kill，返回被 kill 的 PID
+  - 新增 `write_server_pid(pid)` —— spawn 后写当前 PID
+  - **关键时机**：在 main try 块**最开始**调 kill_stale_server（不是 spawn_background_server 内部，因为那时 find_free_port 已经把 8080 跳过）。所以 8080 能复用，不会留一堆端口冲突。
+  - 输出多一行 `♻ 已 kill 上次的 server PID <pid>`（仅当真的 kill 了才打印）
+
+### Files
+
+- `skills/xcmo-mobile/mobile.py`：
+  - imports 加 `signal` / `time`（顶部） / `timezone`
+  - 加 `_local_tz()` / `utc_query_range_for_local_dates()` / `task_in_local_date_range()` 三个时区工具函数
+  - 加 `SERVER_PID_FILE` 常量 + `_pid_alive()` / `_is_our_http_server()` / `_kill_pid()` / `kill_stale_server()` / `write_server_pid()` 五个进程管理函数
+  - `fetch_by_character()` 改两步查询（UTC 外扩 + 本机时区精筛）
+  - `spawn_background_server()` 调 `write_server_pid()` 写新 PID（kill 旧的逻辑移到 main 早期）
+  - main try 块开头加 `kill_stale_server()` 调用
+- `skills/xcmo-mobile/SKILL.md`：Step 1 加日期按本机时区说明；Step 3 加自动 kill 旧 server 说明；错误处理表加两行（多次运行 / 时区错位）
+
+### Verified（5.26 实测）
+
+- 时区修复前：13 个人物 / 15 个视频（漏 8 个北京时间凌晨的 pipeline + 2 个 analyze）
+- 时区修复后：**20 个人物 / 23 个视频**（跟 xcmo 平台一致）
+- 反复跑 3 次：第一次写 PID 31582 → 第二次自动 kill 31582 + 写 31748 → 第三次自动 kill 31748 + 写 32033，端口稳定复用 8080
+
 ## [4.8.1] - 2026-05-26
 
 ### Changed - tier fallback 取代 track 分层（贴回原 spec）
