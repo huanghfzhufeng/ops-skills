@@ -4,6 +4,44 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [5.1.0] - 2026-05-28
+
+### Added - tk-template-scout：用 patchright 过 TikTok CAPTCHA 反爬 + tier 2 兜底放开竖版
+
+**为什么必须改** — 实测 v5.0 跑 tk-template-scout 时 TikTok 弹滑块 CAPTCHA 拦截所有 hashtag/search 页，DOM 里 `a[href*="/video/"]` 返回 0 → 整个严格 24h 模式跑不通。同时 14/26 persona 0 命中里有部分是横版被 tier 2 竖版硬过滤掉。
+
+**v5.1.0 三件套**：
+
+- **patchright 替换 playwright（带 fallback）**：scout_strict.py / grab_viral_challenges.py 优先用 patchright，ImportError 时 fallback vanilla playwright。patchright 补了 ~50 处 headless chromium 指纹漏洞（navigator/canvas/WebGL/GPU），TikTok 反爬识别不出机器人 → search 路径 CAPTCHA 不再弹（hashtag 路径仍被拦，需要后续修）
+- **make_context 区分 patchright/playwright**：patchright 模式跳过手动 `add_init_script` 和固定 UA（vanilla 时代的反检测），让 patchright 自家 stealth 全权处理 —— 实测**不跳过手动反检测会导致双重指纹 0 命中**
+- **tier 2 关闭竖版过滤**：≤30s 兜底档不再强制竖版，最大化 0 命中 persona 救回率（实测从 12/26 救到 16/26）
+
+### Added
+
+- **`skills/tk-template-scout/requirements.txt`**：加 `patchright>=1.40`（保留 `playwright>=1.40` 作 fallback）
+- **`setup.sh`**：
+  - Python 依赖装包加 patchright
+  - 加 `python3 -m patchright install chromium`（patchright 用自己的 patched chromium binary）
+  - **修 cookies 导出 yt-dlp 命令卡 5+ 分钟 bug**：加 `--playlist-items 0`，避免 yt-dlp 爬 `@tiktok` 用户主页所有视频（原来没退出条件）
+
+### Changed
+
+- **`skills/tk-template-scout/scout_strict.py`**：
+  - `from playwright.async_api` → `from patchright.async_api`（带 ImportError fallback）
+  - `chromium.launch()` 加 `channel="chromium"`（patchright 必需，触发 patched binary）
+  - `make_context()` patchright 分支不传 `user_agent` + 不 add_init_script（让自家 stealth 接管）
+  - tier 2 `_filter_records` 调用强制 `filter_vertical=False`（兜底不限版式）
+- **`skills/tk-template-scout/grab_viral_challenges.py`**：同步 patchright import + launch（hashtag 路径仍被 TikTok 拦，但代码就位为后续修复留口）
+- **`skills/tk-template-scout/render_briefing.py`**：
+  - 顶部时长规则文案改为「优先 ≤15s [15s] 仅竖版，0 命中时扩到 ≤30s 标 [30s 兜底] 横版也可以」
+  - 0 命中 placeholder 改为「(24h 内 0 命中 ≤15s 竖版 / ≤30s 兜底模板)」
+- **`skills/tk-template-scout/SKILL.md`**：首次使用段加 patchright 装包说明 + 为什么用 patchright 的解释；严格 24h 模式技术路径段补 tier fallback 行为说明
+
+### Known issues
+
+- `grab_viral_challenges.py` 的 `/tag/<hashtag>` 路径**即便用 patchright 仍被 CAPTCHA 拦**。TikTok 对 hashtag 页风控比 search 严，后续可考虑改用 `search?q=<挑战 hashtag>` 路径找样本视频（虽然丢失"按时间倒序"的好处，但能拿到数据）
+- 部分 persona 仍 0 命中的根因**不是竖版过滤**，而是 TikTok search 排序优先把历史爆款排前，把今天的新视频挤掉 → search 返回的 24 个 URL timestamp 全 > 24h ago。后续可考虑：search URL 改 `sort_type=0`（按时间排）或放宽 `--max-age-hours`
+
 ## [5.0.0] - 2026-05-27
 
 ### Changed - us-trend-scout 推倒重写：v4.8.0 的 5 路通用 WebSearch + 慢趋势 query → v5.0 scout_reddit.py 主路 + WebSearch enrichment + 涌现式输出

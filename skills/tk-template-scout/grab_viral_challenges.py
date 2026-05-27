@@ -60,7 +60,13 @@ from pathlib import Path
 from typing import Any
 
 import scout_strict
-from playwright.async_api import Browser, BrowserContext, async_playwright
+
+try:
+    from patchright.async_api import Browser, BrowserContext, async_playwright
+    _USING_PATCHRIGHT = True
+except ImportError:
+    from playwright.async_api import Browser, BrowserContext, async_playwright
+    _USING_PATCHRIGHT = False
 
 
 log = logging.getLogger("grab_viral_challenges")
@@ -109,10 +115,13 @@ async def grab_hashtag_urls_all(
 ) -> dict[str, list[str]]:
     """并行抓所有候选 hashtag 的 URL list。返回 {hashtag: [urls]}."""
     async with async_playwright() as p:
-        browser = await p.chromium.launch(
-            headless=True,
-            args=["--disable-blink-features=AutomationControlled", "--no-sandbox"],
-        )
+        launch_kwargs: dict = {
+            "headless": True,
+            "args": ["--disable-blink-features=AutomationControlled", "--no-sandbox"],
+        }
+        if _USING_PATCHRIGHT:
+            launch_kwargs["channel"] = "chromium"
+        browser = await p.chromium.launch(**launch_kwargs)
         try:
             # 复用 scout_strict.make_context（带 stealth + cookies）
             context = await scout_strict.make_context(browser, cookies)

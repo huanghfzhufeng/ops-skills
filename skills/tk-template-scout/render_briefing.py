@@ -169,9 +169,10 @@ def format_briefing(
     tight = data.get("tight_max_seconds")
     relaxed = data.get("relaxed_max_seconds")
     if tight and relaxed:
+        # v5.1：tier 2 关闭竖版过滤 — [15s] 仍仅竖版，[30s 兜底] 横版也可以
         lines.append(
-            f"**📏 时长规则**：优先 ≤{tight}s [15s]，0 命中时扩到 ≤{relaxed}s 标 [30s 兜底] "
-            f"| 仅竖版 | 排除自家 26 号"
+            f"**📏 时长规则**：优先 ≤{tight}s [15s] 仅竖版，0 命中时扩到 ≤{relaxed}s 标 [30s 兜底] 横版也可以 "
+            f"| 排除自家 26 号"
         )
         lines.append("")
 
@@ -187,8 +188,8 @@ def format_briefing(
 
         info = persona_data.get(pk)
         if not info or not info.get("videos"):
-            # v4.8.1：tier=none → 两档都没命中
-            lines.append("(24h 内 0 命中 ≤15s / ≤30s 竖版模板)")
+            # v5.1：tier=none → 两档都没命中（tight 仅竖版 + relaxed 横竖不限）
+            lines.append("(24h 内 0 命中 ≤15s 竖版 / ≤30s 兜底模板)")
         else:
             # v4.8.1：tier 标签 [15s] / [30s 兜底] 让运营一眼看出哪条是扩搜
             tier = (info or {}).get("tier_used", "tight")

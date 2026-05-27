@@ -1,3 +1,6 @@
 PyYAML>=6.0
+# patchright = playwright 反检测 fork（过 TikTok CAPTCHA 的关键）。
+# scout_strict.py 优先用 patchright，ImportError 时 fallback 到 vanilla playwright。
+patchright>=1.40
 playwright>=1.40
 playwright-stealth>=2.0

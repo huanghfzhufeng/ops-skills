@@ -127,12 +127,14 @@ fi
 # 5. Python 包
 # ─────────────────────────────────────────────────────────
 
-step "5/6 装 Python 依赖（qrcode pillow PyYAML playwright playwright-stealth）..."
+step "5/6 装 Python 依赖（qrcode pillow PyYAML patchright playwright playwright-stealth）..."
+# patchright = playwright 反检测 fork。tk-template-scout v5.1 起必需，
+# 用来过 TikTok 的滑块 CAPTCHA 反爬。vanilla playwright 会被识别为 headless bot。
 pip3 install --user --break-system-packages --quiet \
-  qrcode pillow PyYAML playwright playwright-stealth 2>&1 | tail -3 || {
+  qrcode pillow PyYAML patchright playwright playwright-stealth 2>&1 | tail -3 || {
   warn "pip 装包有错，重试不带 --quiet 看具体错..."
   pip3 install --user --break-system-packages \
-    qrcode pillow PyYAML playwright playwright-stealth
+    qrcode pillow PyYAML patchright playwright playwright-stealth
 }
 ok "Python 包装好"
 
@@ -140,7 +142,9 @@ ok "Python 包装好"
 # 6. Playwright chromium（最大一项）
 # ─────────────────────────────────────────────────────────
 
-step "6/6 装 Playwright chromium（约 200MB，1-2 分钟）..."
+step "6/6 装 Playwright + patchright chromium（约 200MB，1-2 分钟）..."
+# patchright 用自己 patched 的 chromium binary，必须单独 install
+# 装一次就够（playwright 和 patchright 共享 ~/Library/Caches/ms-playwright 目录）
 
 # 找 playwright 可执行文件
 PLAYWRIGHT_BIN=""
@@ -161,7 +165,9 @@ if [ -n "$PLAYWRIGHT_BIN" ]; then
 else
   python3 -m playwright install chromium
 fi
-ok "Playwright chromium 装好"
+# patchright chromium（如已装会快速跳过）
+python3 -m patchright install chromium 2>&1 | tail -3 || warn "patchright install 出错（非致命，主路径仍可用）"
+ok "Playwright + patchright chromium 装好"
 
 # ─────────────────────────────────────────────────────────
 # Cookies 引导
@@ -184,11 +190,14 @@ echo ""
 read -p "登录完了按回车继续（Ctrl+C 退出）..."
 
 step "导出 cookies 到 /tmp/tiktok-cookies.txt..."
+# --playlist-items 0 让 yt-dlp 只跑到取 cookies 那一步，
+# 不去爬 @tiktok 用户主页的所有视频（不加这个 flag 会卡 5+ 分钟）。
 yt-dlp --cookies-from-browser chrome \
        --cookies /tmp/tiktok-cookies.txt \
        --skip-download \
        --no-warnings \
        --quiet \
+       --playlist-items 0 \
        'https://www.tiktok.com/@tiktok' 2>&1 | tail -3 || true
 
 if [ ! -f /tmp/tiktok-cookies.txt ]; then

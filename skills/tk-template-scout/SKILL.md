@@ -17,14 +17,17 @@ description: 美区 TikTok 每日模板搜索。两种模式：(1) MVP 模式 = 
 
 1. **yt-dlp 已装**：`brew install yt-dlp` 或 `pip install yt-dlp`
 2. **Chrome 浏览器登录过 TikTok**：`https://www.tiktok.com` 已**真实登录**任意账号（cookies 必须含 sessionid，不只是 ttwid）
-3. **（严格 24h 模式才需要）Playwright 已装**：
+3. **（严格 24h 模式才需要）patchright + Playwright 已装**：
 
 ```bash
 pip install -r <skill-dir>/requirements.txt
 playwright install chromium
+python3 -m patchright install chromium
 ```
 
-约占 200MB 磁盘。MVP 模式不需要。
+约占 200-300MB 磁盘。MVP 模式不需要。
+
+> **为什么用 patchright**（v5.1 起）：vanilla playwright headless chromium 会被 TikTok 反爬识别为机器人，弹滑块 CAPTCHA 导致所有 hashtag/search 页拿不到视频列表。patchright 是 playwright 的反检测 fork，补了 ~50 处指纹漏洞，能正常过 TikTok search 路径。scout_strict.py 自动优先用 patchright，ImportError 时 fallback 到 vanilla playwright（不带反检测能力）。
 
 **想推飞书群**（可选）：
 
@@ -353,11 +356,14 @@ UTC 01:00 = 北京 09:00（美东前一天晚上 8-9 点）。
 
 **技术路径**：
 1. 关键词 → hashtag（空格删掉小写：`old money outfit` → `oldmoneyoutfit`）
-2. Playwright headless Chrome 抓 `https://www.tiktok.com/tag/<hashtag>`（按时间倒序）
+2. patchright headless chromium（v5.1 起）抓 search URL `tiktok.com/search/video?q=<keyword>&publish_time=1&sort_type=2`（v4.8 默认 source=search；hashtag 路径仍被 TikTok 反爬挡）
 3. 解析每个视频 URL 的 ID，`timestamp = video_id >> 32`（snowflake 高位编码）
 4. 硬过滤 timestamp >= now - 24h
 5. yt-dlp 给候选 URL 补 like_count / title / uploader
-6. 按 like_count 取 Top 3
+6. tier fallback（v5.1 起）：
+   - **tier 1（tight）**：≤15s + 仅竖版（`height > width`）
+   - **tier 2（relaxed，0 命中时启用）**：≤30s + 横竖不限
+7. 按 like_count 取 Top N（默认 1）
 
 **v4.6.0 单条命令**（默认 Top 1 + ≤15s 硬过滤）：
 

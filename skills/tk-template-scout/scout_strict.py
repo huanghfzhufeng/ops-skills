@@ -47,11 +47,16 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from playwright.async_api import Browser, BrowserContext, async_playwright
+try:
+    from patchright.async_api import Browser, BrowserContext, async_playwright
+    _USING_PATCHRIGHT = True
+except ImportError:
+    from playwright.async_api import Browser, BrowserContext, async_playwright
+    _USING_PATCHRIGHT = False
 
 try:
     from playwright_stealth import Stealth
-    _STEALTH_AVAILABLE = True
+    _STEALTH_AVAILABLE = not _USING_PATCHRIGHT
 except ImportError:
     _STEALTH_AVAILABLE = False
 
@@ -185,18 +190,25 @@ def build_urls(keyword: str, hashtag: str, source_mode: str) -> list[tuple[str, 
 
 
 async def make_context(browser: Browser, cookies: list[dict[str, Any]]) -> BrowserContext:
-    context = await browser.new_context(
-        user_agent=USER_AGENT,
-        viewport={"width": 1280, "height": 900},
-        locale="en-US",
-    )
-    await context.add_init_script(
-        """
-        Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-        Object.defineProperty(navigator, 'plugins', {get: () => [1,2,3,4,5]});
-        Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
-        """
-    )
+    if _USING_PATCHRIGHT:
+        # patchright 自己做完整指纹修补；手动覆盖 navigator + 固定 UA 会留下双重指纹反而被识破
+        context = await browser.new_context(
+            viewport={"width": 1280, "height": 900},
+            locale="en-US",
+        )
+    else:
+        context = await browser.new_context(
+            user_agent=USER_AGENT,
+            viewport={"width": 1280, "height": 900},
+            locale="en-US",
+        )
+        await context.add_init_script(
+            """
+            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+            Object.defineProperty(navigator, 'plugins', {get: () => [1,2,3,4,5]});
+            Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
+            """
+        )
     await context.add_cookies(cookies)
     return context
 
@@ -367,10 +379,13 @@ async def scrape_all(
     errors: list[tuple[str, str, str, str]] = []
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(
-            headless=True,
-            args=["--disable-blink-features=AutomationControlled", "--no-sandbox"],
-        )
+        launch_kwargs: dict = {
+            "headless": True,
+            "args": ["--disable-blink-features=AutomationControlled", "--no-sandbox"],
+        }
+        if _USING_PATCHRIGHT:
+            launch_kwargs["channel"] = "chromium"
+        browser = await p.chromium.launch(**launch_kwargs)
         try:
             workers = [
                 asyncio.create_task(
@@ -672,8 +687,9 @@ def build_report(
             chosen, stats, tier, max_dur = tight_kept, tight_stats, "tight", tight_max
         else:
             # tier 2: ≤30s 兜底（仅当 tier 1 0 命中时启用）
+            # v5.1：tier 2 关闭竖版过滤（横版也可以），最大化兜底命中率
             relaxed_kept, relaxed_stats = _filter_records(
-                records, relaxed_max, filter_vertical, exclude_handles,
+                records, relaxed_max, False, exclude_handles,
             )
             chosen = relaxed_kept
             stats = relaxed_stats
