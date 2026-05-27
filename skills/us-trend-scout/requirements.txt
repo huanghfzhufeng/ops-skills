@@ -1,0 +1,5 @@
+# scout_reddit.py 只用标准库（urllib + json + xml.etree）
+# 不需要 requests / pytrends 等第三方包
+#
+# 如果未来要加（暂不需要）：
+#   pytrends>=4.9  # Google Trends 拉更多条

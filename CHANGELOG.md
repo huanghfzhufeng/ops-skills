@@ -4,6 +4,77 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [5.0.0] - 2026-05-27
+
+### Changed - us-trend-scout 推倒重写：v4.8.0 的 5 路通用 WebSearch + 慢趋势 query → v5.0 scout_reddit.py 主路 + WebSearch enrichment + 涌现式输出
+
+**为什么必须重构** — 卢雨悦反馈"今天热点跟昨天完全重复，质量很一般"。实测发现 v4.8.0 三个根因：
+
+1. **Query 形态错了**：5 路全是 `industry shift movement / cultural shift` 慢趋势词，搜索引擎返回的全是 McKinsey/BoF/Vogue **年度报告**（每天 top 结果几乎不变 → 跟昨天看起来一样）
+2. **24h 不能硬过滤**：query 里塞 `past 24 hours` 是软提示，搜索引擎不执行；实测拿到 0 条 24h 内真事件
+3. **没去重**：跨天热点反复推
+
+**v5.0 三件套**：
+
+- **第一层信源 = scout_reddit.py（脚本主路）**：16 个精选 Reddit sub × `t=day&limit=100` 原生 24h 硬过滤 + Google Trends RSS 侧路 cross-check
+- **第二层评估 = Claude TAEP + WebSearch enrichment**：对脚本输出的 ~90 条候选按 T-A-E-P-C 五维评分，对过 20 分的做 WebSearch 跨平台验证（找仿拍参考/找品牌出处），最终 ≥22/25 进简报
+- **输出 = 涌现式**：今天有几条出几条（0-15 条），**禁止凑数**，不达标赛道留空、0 条诚实留空
+
+### Added
+
+- **`skills/us-trend-scout/scout_reddit.py`**（新增 ~350 行，**纯标准库**无需 pip install）：
+  - **拉取层**：`fetch_all_subs()` 并发 8 worker 拉 16 个精选 sub × 100 条 + Google Trends RSS
+  - **三层闸门过滤**：
+    - 闸门 1 — `created_utc` 距今 > 24h drop（双保险，即使 Reddit `t=day` 漏过 sticky）
+    - 闸门 2 — title 关键词（政治/体育/灾难 + "rate my"/"OOTD"/求助形态）+ **source-subreddit 黑名单（100+ 娱乐/体育/fandom sub）** + flair 黑名单
+    - 闸门 3 — 按 sub 调阈值（`OutOfTheLoop` 100 up + 15 cmt；`artificial` 20 up + 10 cmt；DEFAULT 200 up + 50 cmt）
+  - **同跑 permalink 去重**：同一帖 crosspost 到多个 sub 只保留 ups 最高的一份
+  - **7 天历史去重**：`~/.config/ops-skills/us-trend-history.json`，title Jaccard 相似度 ≥ 0.6 视为重复
+  - **输出 candidates.json**：含 stats / per_sub / candidates (with selftext) / google_trends，供 Claude 端 TAEP 评估
+  - **CLI flags**：`--output` / `--history` / `--no-dedupe` / `--no-trends` / `--verbose`
+
+- **`skills/us-trend-scout/requirements.txt`**（新增，标记零第三方依赖）
+
+### Changed
+
+- **`skills/us-trend-scout/SKILL.md`**（+195/-140，从 v4.8.0 完整重写到 v5.0）：
+  - Step 3 由 5 路 WebSearch 改为 `python3 scout_reddit.py --output /tmp/us-trend-candidates.json`
+  - Step 4 由 Claude 直读 search 结果改为读 candidates.json + TAEP 五维评分 + WebSearch enrichment
+  - Step 5/6 由"5 赛道每个 1 条"凑数改为涌现式（达标几条出几条 + 0 条诚实留空 + 每条带 TAEP 分 + Reddit 数据 + 跨平台来源）
+  - 文件头部加 v5.0 设计原则 section（24h 硬窗口 / 质量第一宁缺勿滥 / 跨天去重 / TikTok 外热点）
+  - 末尾加 **v5.0 vs v4.8.0 对比表**（实测真热点数：0 vs 5-15）
+
+### Removed
+
+- v4.8.0 的 5 路慢趋势 query (`industry shift movement` / `cultural shift` 类) — 实测证明 WebSearch + 24h 文本提示返回 42 条 link 里 **0 条 24h 内**
+- 5 大赛道平均分配机制 — 改为涌现式，按当日舆论场自然出条
+
+### 实测对比（同一天测试）
+
+| 维度 | v4.8.0 老版 | v5.0 新版 |
+|---|---|---|
+| 信源 | 5 路通用 WebSearch | Reddit 16 sub + Trends + WebSearch enrich |
+| 24h 过滤 | query 文本（无效） | API 原生 `t=day` + `created_utc` 硬过滤 |
+| 拉到的实际内容 | McKinsey/BoF/Global Wellness Summit 年度报告 | "Erin Brockovich 数据中心地图" / "12 岁 AI 女友" / "Uber 烧光 AI 预算" 等真发酵帖 |
+| 真热点数 | 0 条（全是慢趋势） | **5-15 条**（依当日舆论场涌现） |
+| 跨天去重 | ❌ 无 | ✅ 7 天指纹库 |
+| 0 条达标处理 | 强行凑数 | **诚实留空** |
+
+### Files
+
+- `skills/us-trend-scout/SKILL.md`：完整重写（v4.8.0 → v5.0）
+- `skills/us-trend-scout/scout_reddit.py`：新增主脚本
+- `skills/us-trend-scout/requirements.txt`：新增依赖说明
+- `.claude-plugin/plugin.json` / `.claude-plugin/marketplace.json`：版本 4.8.2 → 5.0.0
+
+### 不影响 tk-template-scout / xcmo-mobile
+
+本次重构只动 us-trend-scout，另两个 skill 完全不变。两者分工对照表（在新 SKILL.md 里）：
+- **tk-template-scout** = TikTok 平台**内**的 viral 模板（yt-dlp）
+- **us-trend-scout** = TikTok **外**冒头的事件型热点（Reddit + Trends + WebSearch）
+
+---
+
 ## [4.8.2] - 2026-05-26
 
 ### Fixed - 两个真 bug：时区错位漏 task + 反复运行进程残留
