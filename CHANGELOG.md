@@ -4,6 +4,41 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [5.2.0] - 2026-05-28
+
+### Changed - us-trend-scout：TAEP 五维打分 → 3 yes 定性判断
+
+**为什么改** — 实测 v5.0 跑发现 TAEP 打分是伪客观（每维 1-5 分边界全是 Claude 主观定的），加上 P=0 / C<3 这种 drop 规则把"DOJ E. Jean Carroll 调查"这种有专业视角能写 hot take 的法律/性别议题机械 drop。打分包装出"理性公允"的样子，实际还是 LLM 判断，但被框死在阈值里反而丢边缘有价值条目。
+
+**v5.2 方案 A**：Claude 拿 candidates + GT 数组，对每条问 3 句 yes/no：
+
+1. 今天有人在讨论这事吗（不是慢趋势）—— 脚本已保证 24h 内
+2. 26 角色里有谁能写出**具体仿拍 brief**（场景 + 动作 + 钩子，不是泛言"可以蹭"）
+3. 推给运营能产 1-2 条视频选题吗
+
+**3 yes 进简报**，任一 no drop。不打分、不算总分、不卡阈值。
+
+防偷懒 = 要求 brief 必须**写出来**（写不出来自动 drop），而不是数字阈值。
+对政治/法律/性别议题**不机械 drop**——判断标准改为"26 角色有专业视角能写 hot take 吗"。
+
+### Changed
+
+- **`skills/us-trend-scout/SKILL.md`**：
+  - frontmatter description 从「TAEP 五维评分」改为「3 yes 定性判断（取代 v5.0 的 TAEP 评分）」
+  - Step 4 标题从「TAEP 评分 + WebSearch enrichment」改为「定性判断 + WebSearch enrichment」
+  - Step 4 内容重写：5 维打分表 → 3 yes 判断列表 + "对政治/法律/性别议题不机械 drop" 的明确说明
+  - Step 5 删掉「按 TAEP 总分降序」改为「按 Claude 综合判断的"重要性 + 仿拍价值"排序」
+  - Step 5 新增「简报里不写"为什么选这条"」原则（避免 Claude 自辩浪费读者注意力）
+  - Step 6 简报模板去掉 `[TAEP X/25]` 标签
+  - Step 6 0 条简报模板去掉「TAEP 22/25 门槛」描述
+  - Step 8 stats 段「TAEP 初筛 (≥20)/二筛 (≥22)」改为「定性筛过 (3 yes)」
+  - 文体约束「每条必须带 TAEP 分」改为「每条必须带 ups + comments + age + Reddit 原帖 + 跨平台来源」（GT 条目用 traffic + 跨平台来源）
+- **`skills/us-trend-scout/scout_reddit.py`**：顶部 docstring 第二层评估描述跟着改
+
+### Known issues
+
+- `~/.claude/scheduled-tasks/us-trend-scout-daily/SKILL.md` 是 user-local 文件，**仍是 v4.8.0 老流程**（5 路 WebSearch 慢趋势 query）。不在本 plugin 仓库管辖范围内，需要用户手动同步更新（或改成 `run skill us-trend-scout` 让 plugin SKILL.md 接管）。
+
 ## [5.1.0] - 2026-05-28
 
 ### Added - tk-template-scout：用 patchright 过 TikTok CAPTCHA 反爬 + tier 2 兜底放开竖版

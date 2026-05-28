@@ -1,6 +1,6 @@
 ---
 name: us-trend-scout
-description: 美区 24h 真热点抓取 + 26 数字角色创意配对。v5.0 重构：从"5 路通用 WebSearch + 慢趋势 query"换成"scout_reddit.py 脚本拉 16 个精选 Reddit sub（含 r/OutOfTheLoop 文化引爆点金矿 + r/technology + r/news + 美妆/健康/影视 sub）+ Google Trends 侧路 cross-check + Claude 端 WebSearch enrichment + TAEP 五维评分 + 7 天跨天去重 + 涌现式输出（不为完成而完成）"。卢雨悦每天必用。触发：用户说"热点日报"、"美区热点"、"us trend"、"trend scout"、"跑一次热点"，或被 /schedule 定时触发。
+description: 美区 24h 真热点抓取 + 26 数字角色创意配对。v5.2 改进：scout_reddit.py 脚本拉 16 个精选 Reddit sub（含 r/OutOfTheLoop 文化引爆点金矿 + r/technology + r/news + 美妆/健康/影视 sub）+ Google Trends 侧路 cross-check + Claude 端 WebSearch enrichment + 3 yes 定性判断（取代 v5.0 的 TAEP 评分）+ 7 天跨天去重 + 涌现式输出（不为完成而完成）。卢雨悦每天必用。触发：用户说"热点日报"、"美区热点"、"us trend"、"trend scout"、"跑一次热点"，或被 /schedule 定时触发。
 ---
 
 # US Trend Scout
@@ -32,7 +32,7 @@ description: 美区 24h 真热点抓取 + 26 数字角色创意配对。v5.0 重
 - Google Trends Realtime US RSS（10 条，仅用于 cross-check 加分）
 
 **第二层（Claude 用 WebSearch enrichment）**：
-- 对每条进入 TAEP 评分的候选，做 1-2 次 WebSearch：
+- 对 selftext 不足以判断引爆点 / 写 brief 的候选，做 1-2 次 WebSearch：
   - 跨平台验证（Twitter/TikTok/主流媒体也爆了吗）
   - 找仿拍参考（TikTok 已有作品多少 → 判断红利窗口）
   - 补 Reddit selftext 没讲清的引爆点细节
@@ -116,35 +116,32 @@ python3 <plugin-root>/skills/us-trend-scout/scout_reddit.py \
 
 脚本已经做完了 3 层闸门：(1) 24h 硬过滤 (2) 主题/形态/source-sub/flair 排除 (3) upvote+comments 阈值 + 同跑内 permalink 去重 + 7 天历史去重。Claude **不需要重做这些**。
 
-### Step 4 - TAEP 评分 + WebSearch enrichment（Claude 端核心思考）
+### Step 4 - 定性判断 + WebSearch enrichment（Claude 端核心思考）
 
-读 `/tmp/us-trend-candidates.json` 的 `candidates` 数组。**对每条**按 TAEP 五维评分（每维 1-5，T 由脚本保证恒等 5）：
+读 `/tmp/us-trend-candidates.json` 的 `candidates` 数组 + `google_trends` 数组。**对每条**按下面 3 句定性判断（v5.2 起取消 TAEP 五维打分，因为打分是伪客观且 drop 阈值丢边缘有价值条目）：
 
-| 维度 | 评分细则 |
-|---|---|
-| **T 时间锐度** | 脚本保证 24h 内 = 5（恒等） |
-| **A 注意力** | ups > 10000 = 5；> 5000 = 4；> 2000 = 3；> 500 = 2；其他 = 1 |
-| **E 引爆点清晰** | 能指到具体视频/事件/产品/帖子 = 5；只是讨论 = 3；定性 = 1 |
-| **P 可参与度** | 26 角色 ≥ 2 个能蹭 = 5；1 个能蹭 = 3；0 个 = **drop**（不评分） |
-| **C 商业属性** | 消费/生活方式/文化/科技产品 = 5；中性新闻 = 2；政治/体育/灾难 = 1（**< 3 drop**） |
+**进简报的 3 个 yes**：
 
-**初筛门槛**：总分 ≥ 20/25 进入第二轮 WebSearch enrichment。**这不是死阈值**，是 Claude 的自审清单——核心判断是"它是不是真热点"。
+1. **今天有人在讨论这事吗**（不是慢趋势）—— 脚本已保证 candidates 数组 24h 内（Reddit `t=day` + `created_utc` 二次校验）；GT 数组看 traffic 估算
+2. **26 角色里有谁能写出具体仿拍 brief**（场景 + 动作 + 钩子，不是泛言"可以蹭"）—— 写不出来就 drop
+3. **这条推给运营能产 1-2 条视频选题吗** —— Claude 综合判断
 
-**对每条过初筛的候选，做 1-2 次 WebSearch**：
+**3 yes 进简报，任一 no 直接 drop**。不打分、不算总分、不卡阈值。
+
+**WebSearch enrichment（可选，只对 Step 2 写不清楚 brief 的做）**：
+
+如果 Reddit selftext 不足以判断引爆点 / 写仿拍 brief，做 1-2 次 WebSearch：
 
 1. **跨平台验证 query**：`"[热点关键词]" Twitter TikTok past 24 hours`
-   - 加分项：主流媒体（Variety/Vox/BBC/CNBC）也报道 → A 加 1 分
-   - 减分项：只有 Reddit 内部讨论 → A 减 1 分
-
 2. **仿拍参考 query**：`"[热点关键词]" TikTok video viral creators`
-   - 加分项：TikTok 已有 reaction 但 < 50 个 → P 加 1（红利窗口未关）
-   - 减分项：TikTok 已有 500+ reaction → P 减 1（窗口已关闭）
 
-跨平台 enrichment 完成后，**总分 ≥ 22/25 才进简报**（提高门槛，因为有了更多信息可判断）。
+enrichment 拿到的信息回到 Step 2 重新判断"能不能写具体 brief"。
+
+**对政治/法律/性别议题不要机械 drop**：v5.0 老规则"C 政治/体育/灾难 = 1 drop"砍掉。判断标准改为"26 角色里有专业视角能写 hot take 吗"——比如 DOJ E. Jean Carroll 调查，iris（四大审计法律视角）+ jade（心理咨询师二次创伤视角）能写专业 hot take 就进；纯党争新闻没角色能写就 drop。
 
 ### Step 5 - 涌现式输出（不为完成而完成）
 
-按调整后 TAEP 总分降序排列进入简报。**核心原则**：
+按 Claude 综合判断的"重要性 + 仿拍价值"排序进简报。**核心原则**：
 
 - ❌ 不强求 5 条
 - ❌ 不强求 5 赛道平均分配
@@ -152,53 +149,51 @@ python3 <plugin-root>/skills/us-trend-scout/scout_reddit.py \
 - ✅ 今天有几条真热点出几条（0-15 条都可能）
 - ✅ 0 条就诚实说 0 条
 
-**人设配对**：每条找**最贴合的 1-2 个**角色，给具体仿拍 brief（场景 + 动作 + 钩子）。**找不到合适的角色就不配**（P 评分应该已经过滤掉这种情况）。
+**人设配对**：每条找**最贴合的 1-3 个**角色，给具体仿拍 brief（场景 + 动作 + 钩子）。**简报里不写"为什么选这条"**——把判断展示给运营会显得 Claude 在自辩，运营要的是"选完的结果"。
 
 ### Step 6 - 拼简报（v5.0 涌现式格式）
 
 **markdown 富文本**（飞书 card 渲染 `**加粗**` / `[文字](url)` 链接）。
 
-每条结构 5 行：
+每条结构 5 行（v5.2 去掉 `[TAEP X/25]` 标签）：
 
 ```
-#N [TAEP X/25]
+#N
 🔥 **热点 title 简短描述**
-📊 ups: X · comments: Y · Zh ago · r/sub
+📊 ups: X · comments: Y · Zh ago · r/sub  （或 Google Trends traffic: X）
 🔗 来源：[Reddit 原帖](url) | [跨平台报道](url) | [TikTok 参考](url)
-🎭 人设：A 拍 "具体场景+动作+钩子"；B 拍 "..."
+🎭 人设：A 拍「具体场景+动作+钩子」；B 拍「...」
 ```
 
 **简报整体结构**：
 
 ```
-美区热点日报 | 5月27日（周二）| 今日真热点 N 条（候选 90 条经 TAEP 过滤）
+美区热点日报 | 5月28日（周四）| 今日真热点 N 条
 
-#1 [TAEP 24/25]
+#1
 🔥 **Erin Brockovich 公布全美 4,200 个数据中心地图，呼吁本地社区行动**
 📊 ups: 22,787 · comments: 547 · 7.3h ago · r/technology
 🔗 来源：[Reddit 原帖](url) | [The Verge 报道](url) | [TikTok #datacenterprotest](url)
-🎭 人设：Mia 拍 "湾区 SWE bro 查自家附近数据中心位置 vlog"；Ryan 拍 "AI 时代环境账单这样算"
+🎭 人设：Mia 拍「湾区 SWE bro 查自家附近数据中心位置 vlog」；Ryan 拍「AI 时代环境账单这样算」
 
-#2 [TAEP 23/25]
+#2
 🔥 **小学生（12 岁起）大规模和 AI 女友谈恋爱，专家警告**
 📊 ups: 17,769 · comments: 2,673 · 23h ago · r/technology
 🔗 来源：[Reddit 原帖](url) | [Guardian 报道](url) | [TikTok 仅 23 个 reaction，窗口开](url)
-🎭 人设：Jade 拍 "心理咨询师视角，男孩 AI 女友会带来什么"；Mia 拍 "AI 公司怎么放任 12 岁注册的"
+🎭 人设：Jade 拍「心理咨询师视角，男孩 AI 女友会带来什么」；Mia 拍「AI 公司怎么放任 12 岁注册的」
 
 ...
 
-— 今日另抓到 75 条 24h 内候选，但均未达到 TAEP 22/25 标准 —
-— 已 drop 5 条与过去 7 天重复的热点 —
+— 今日抓到 X raw / Y 过 3 层闸门 / Z 与过去 7 天重复 drop / N final + GT 经定性筛选后，N 条满足 "26 角色能写具体仿拍 brief" 标准 —
 ```
 
 **0 条达标时**：
 
 ```
-美区热点日报 | 5月27日（周二）| 今日无符合标准的真热点
+美区热点日报 | 5月28日（周四）| 今日无符合标准的真热点
 
-今日抓到 90 条候选，经 TAEP 五维评分 + WebSearch cross-check，无一条满足 22/25 门槛。
-可能原因：(a) 美区今日确无新事件冒头，(b) 重大事件被排除规则过滤（政治/体育/灾难类），
-(c) 候选偏 Reddit 内部讨论未跨平台。
+今日抓到 X 条候选，经定性判断（3 yes 进简报）无一条满足 "26 角色能写具体仿拍 brief"。
+可能原因：(a) 美区今日确无新事件冒头，(b) 候选偏 Reddit 内部讨论 / 体育 / 政治党争（无角色能写专业 hot take），(c) 候选偏行业宏观讨论非具体事件。
 
 明日再抓。
 ```
@@ -228,8 +223,7 @@ fi
   原始候选: 643 (16 sub × ~40)
   过 3 层闸门: 90
   跨天去重 drop: 5
-  TAEP 初筛 (≥20): 18
-  WebSearch enrich + 二筛 (≥22): N
+  定性筛过 (3 yes): N
   涌现真热点: N
   飞书推送: ok/skip
 ```
@@ -250,7 +244,7 @@ UTC 01:00 = 北京 09:00（美东前一天晚上 8-9 点）。
 - **不用 em dash（—）**，用逗号、句号、冒号
 - markdown 富文本（飞书 card 渲染 `**加粗**` / 链接）
 - 数字角色名首字母大写（Caden / Sophie），不写 handle
-- 每条热点必须带：TAEP 分 + ups + comments + age + Reddit 原帖 + 至少 1 个跨平台来源
+- 每条热点必须带：ups + comments + age + Reddit 原帖 + 至少 1 个跨平台来源（GT 条目用 traffic + 跨平台来源）
 - **不允许编时间** — 时间字段全部来自 scout_reddit.py 的 `age_h` 字段（脚本算的）
 
 ## 失败处理

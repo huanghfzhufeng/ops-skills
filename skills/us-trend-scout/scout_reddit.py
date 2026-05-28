@@ -5,7 +5,7 @@ us-trend-scout / scout_reddit.py
 拉 17 个精选 Reddit sub 的 24h top 100 → 三层闸门过滤 → 7 天去重 → 输出 candidates.json
 
 第一层信源（脚本）：Reddit + Google Trends RSS（侧路）
-第二层评估（Claude 在 SKILL.md 里）：每条候选用 WebSearch 做跨平台 cross-check + TAEP 评分
+第二层评估（Claude 在 SKILL.md 里）：每条候选 3 yes 定性判断（v5.2 起取代 v5.0 TAEP 评分）+ 可选 WebSearch 跨平台 cross-check
 
 用法：
     python3 scout_reddit.py --output candidates.json
