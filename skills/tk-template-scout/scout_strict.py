@@ -544,33 +544,62 @@ def fetch_metadata(url: str, source: str = "hashtag", browser: str = "chrome",
 def fetch_metadata_for_all(
     candidates_by_persona: dict[str, list[VideoCandidate]],
     parallel: int,
+    max_retries: int = 2,
+    rate_limit_threshold: float = 0.4,
+    backoff_seconds: int = 60,
 ) -> tuple[dict[str, list[VideoRecord]], int, int]:
-    """并行跑 yt-dlp。"""
+    """并行跑 yt-dlp，带抗限流重试。
+
+    v5.3：第一轮失败率 >= rate_limit_threshold 判定为 TikTok 限流（不是个别视频失效），
+    sleep backoff 后只重试失败的 URL，最多 max_retries 轮，backoff 线性递增。
+    修掉之前"一被限流 yt-dlp 就整批全挂、personas_with_data=0"的问题。
+    失败率低（个别视频失效）则不等待，直接收尾。
+    """
     flat: list[tuple[str, str, str]] = [
         (persona, c.url, c.source)
         for persona, cands in candidates_by_persona.items()
         for c in cands
     ]
-    log.info("yt-dlp fetching %d URLs (parallel=%d)", len(flat), parallel)
+    total = len(flat)
+    log.info("yt-dlp fetching %d URLs (parallel=%d)", total, parallel)
 
     records_by_persona: dict[str, list[VideoRecord]] = defaultdict(list)
-    ok = 0
-    fail = 0
-    with ThreadPoolExecutor(max_workers=parallel) as pool:
-        future_map = {pool.submit(fetch_metadata, url, src): (p, url, src)
-                      for p, url, src in flat}
-        done = 0
-        for fut in as_completed(future_map):
-            persona, _url, _src = future_map[fut]
-            done += 1
-            if done % 50 == 0:
-                log.info("  yt-dlp progress: %d/%d", done, len(flat))
-            rec = fut.result()
-            if rec is None:
-                fail += 1
-                continue
-            ok += 1
-            records_by_persona[persona].append(rec)
+    pending = flat
+    attempt = 0
+    while pending:
+        failed: list[tuple[str, str, str]] = []
+        with ThreadPoolExecutor(max_workers=parallel) as pool:
+            future_map = {pool.submit(fetch_metadata, url, src): (p, url, src)
+                          for p, url, src in pending}
+            done = 0
+            for fut in as_completed(future_map):
+                persona, _url, _src = future_map[fut]
+                done += 1
+                if done % 50 == 0:
+                    log.info("  yt-dlp progress: %d/%d (round %d)",
+                             done, len(pending), attempt + 1)
+                rec = fut.result()
+                if rec is None:
+                    failed.append(future_map[fut])
+                    continue
+                records_by_persona[persona].append(rec)
+
+        fail_rate = len(failed) / len(pending) if pending else 0.0
+        if failed and attempt < max_retries and fail_rate >= rate_limit_threshold:
+            wait = backoff_seconds * (attempt + 1)
+            log.warning(
+                "yt-dlp round %d: %d/%d failed (%.0f%%), likely TikTok rate-limit; "
+                "sleeping %ds then retrying failed URLs",
+                attempt + 1, len(failed), len(pending), fail_rate * 100, wait,
+            )
+            time.sleep(wait)
+            pending = failed
+            attempt += 1
+        else:
+            pending = []
+
+    ok = sum(len(v) for v in records_by_persona.values())
+    fail = total - ok
     return dict(records_by_persona), ok, fail
 
 
@@ -774,7 +803,9 @@ def main() -> None:
     parser.add_argument("--personas", type=Path, default=None,
                         help="personas.yaml 路径（决定 track 分层时长 + self-exclude handle 黑名单）。"
                              "默认查 ~/.config/ops-skills/personas.yaml → plugin 自带")
-    parser.add_argument("--cookies", type=Path, default=Path("/tmp/tiktok-cookies.txt"))
+    parser.add_argument("--cookies", type=Path, default=None,
+                        help="cookies 文件路径。未指定时优先 ~/.config/ops-skills/tiktok-cookies.txt"
+                             "（持久，跨天不被 /tmp 清），不存在则 fallback /tmp/tiktok-cookies.txt")
     parser.add_argument("--max-age-hours", type=int, default=24)
     parser.add_argument("--top-n", type=int, default=1,
                         help="每 persona 取 Top N（v4.6.0 默认 1）")
@@ -798,6 +829,11 @@ def main() -> None:
     parser.add_argument("--id-verify-sample", type=int, default=DEFAULT_ID_VERIFY_SAMPLE)
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
+
+    # cookies 路径解析（v5.4）：未显式指定时优先持久目录，避免 /tmp 跨天被清导致每天重导
+    if args.cookies is None:
+        persistent = Path.home() / ".config" / "ops-skills" / "tiktok-cookies.txt"
+        args.cookies = persistent if persistent.exists() else Path("/tmp/tiktok-cookies.txt")
 
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
