@@ -1,0 +1,2 @@
+# sge-blog-watcher 仅用 Python 标准库（urllib / re / json / html / pathlib）。
+# 无需 pip install。飞书推送复用 ../tk-template-scout/push_feishu_card.py（也是纯标准库）。

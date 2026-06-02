@@ -4,6 +4,30 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [5.3.0] - 2026-06-02
+
+### Added - sge-blog-watcher：监听 SGE 博客，新文章自动推飞书群
+
+**为什么加** — 朱锋需求：socialgrowthengineers.com（筛选好的 TikTok UGC 模版站）每发新博客，自动推送到飞书群，运营不用手动刷。
+
+**做法** — 纯公开站 curl 抓取（无需登录 / cookies / 反爬），sitemap URL 集合 diff 做增量检测，永久 seen 去重防重推，首次跑建 baseline 不推历史。每条博客一张飞书富文本卡片（中文标题 + 摘要 + 正文 TL;DR 含可复用钩子原文 + 原文链接）。中文化由 Claude 主线按 translate_prompt.md 生成。
+
+**自动化** — /schedule 每 10 分钟轮询（cron `*/10 * * * *`），有新博客 ≤10 分钟自动推，无则静默退出。复用 tk-template-scout 的 push_feishu_card.py 推送。
+
+**工程注意** — 推送必须逐张单条命令（不用 while/for 循环），否则在 Claude 执行环境会被沙箱后台化导致 POST 飞书 hang（实测，GET 不受影响）。
+
+### Added
+
+- **`skills/sge-blog-watcher/watch.py`**：sitemap diff + 抓 meta/正文 + seen 去重（check / commit 两子命令，纯标准库）
+- **`skills/sge-blog-watcher/render_card.py`**：翻译后 JSON → 一篇一卡飞书文本（格式固化）
+- **`skills/sge-blog-watcher/translate_prompt.md`**：Claude 中文化 + 正文 TL;DR 规则
+- **`skills/sge-blog-watcher/SKILL.md`**：完整工作流 + 每 10 分钟 /schedule 配置 + 逐张推加固说明
+- **`skills/sge-blog-watcher/requirements.txt`**：无第三方依赖说明
+
+### Changed
+
+- **`.claude-plugin/marketplace.json` / `plugin.json`**：version 5.2.0 → 5.3.0，plugin 描述加入第 (4) 项 SGE 博客监听推送
+
 ## [5.2.0] - 2026-05-28
 
 ### Changed - us-trend-scout：TAEP 五维打分 → 3 yes 定性判断
