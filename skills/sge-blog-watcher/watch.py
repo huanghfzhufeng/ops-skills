@@ -15,6 +15,7 @@ state 文件：~/.config/ops-skills/sge-blog-watcher-seen.json（跨 plugin 升�
 from __future__ import annotations
 
 import argparse
+import datetime
 import html
 import json
 import re
@@ -27,6 +28,7 @@ SITEMAP_INDEX = "https://www.socialgrowthengineers.com/sitemap.xml"
 UA = {"User-Agent": "Mozilla/5.0 (compatible; sge-blog-watcher/1.0)"}
 STATE_DIR = Path.home() / ".config" / "ops-skills"
 STATE_FILE = STATE_DIR / "sge-blog-watcher-seen.json"
+PUSHLOG_FILE = STATE_DIR / "sge-blog-watcher-pushlog.jsonl"
 BODY_MAX_CHARS = 6000
 
 # 顶级单段 slug 里这些不是博客（app 收录、静态页、导航页）
@@ -153,6 +155,38 @@ def save_seen(urls: set[str]) -> None:
     tmp.replace(STATE_FILE)
 
 
+def append_pushlog(entries: list[dict]) -> None:
+    """把推送记录 append 到 pushlog.jsonl（每行一个 JSON：时间/分类/标题/url）。"""
+    if not entries:
+        return
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    text = "".join(json.dumps(e, ensure_ascii=False) + "\n" for e in entries)
+    with PUSHLOG_FILE.open("a", encoding="utf-8") as handle:
+        handle.write(text)
+
+
+def _log_committed(translated_path: str, committed: set[str]) -> int:
+    """从 translated.json 取已推 URL 的标题等，写入推送日志。返回写入条数。"""
+    try:
+        data = json.loads(Path(translated_path).read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return 0
+    now = datetime.datetime.now().astimezone().replace(microsecond=0).isoformat()
+    entries = [
+        {
+            "pushed_at": now,
+            "published": post.get("published"),
+            "section": post.get("section"),
+            "title": post.get("title_cn") or post.get("title"),
+            "url": normalize(post.get("url", "")),
+        }
+        for post in data.get("posts", [])
+        if normalize(post.get("url", "")) in committed
+    ]
+    append_pushlog(entries)
+    return len(entries)
+
+
 def cmd_check(args: argparse.Namespace) -> int:
     try:
         current_list, sm_stats = get_all_blog_urls()
@@ -203,10 +237,39 @@ def cmd_commit(args: argparse.Namespace) -> int:
         add |= {normalize(u) for u in args.url}
     new_seen = seen | add  # 不可变：构造新集合，不原地改
     save_seen(new_seen)
+
+    logged = 0
+    if args.log_from and add:
+        logged = _log_committed(args.log_from, add)
+
     print(json.dumps({
         "committed": len(add),
         "total_seen": len(new_seen),
+        "logged": logged,
     }, ensure_ascii=False))
+    return 0
+
+
+def cmd_log(args: argparse.Namespace) -> int:
+    if not PUSHLOG_FILE.exists():
+        print("（暂无推送记录）")
+        return 0
+    entries: list[dict] = []
+    for line in PUSHLOG_FILE.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entries.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    tail = entries[-args.tail:] if args.tail > 0 else entries
+    print(f"推送历史：累计 {len(entries)} 篇，显示最近 {len(tail)} 篇")
+    for entry in tail:
+        pushed = (entry.get("pushed_at") or "")[:16].replace("T", " ")
+        published = (entry.get("published") or "")[:10]
+        print(f"  {pushed}  [{published}] {entry.get('title', '?')}")
+        print(f"      {entry.get('url', '')}")
     return 0
 
 
@@ -222,7 +285,14 @@ def main() -> None:
     p_commit = sub.add_parser("commit", help="把 URL 标记为已推送")
     p_commit.add_argument("--urls-file", help="每行一个 URL 的文件")
     p_commit.add_argument("--url", nargs="*", help="直接传 URL（可多个）")
+    p_commit.add_argument("--log-from",
+                          help="translated.json 路径；给了就从中取标题写推送日志")
     p_commit.set_defaults(func=cmd_commit)
+
+    p_log = sub.add_parser("log", help="查看推送历史")
+    p_log.add_argument("--tail", type=int, default=20,
+                       help="显示最近 N 条（默认 20，传 0 = 全部）")
+    p_log.set_defaults(func=cmd_log)
 
     args = parser.parse_args()
     sys.exit(args.func(args))
