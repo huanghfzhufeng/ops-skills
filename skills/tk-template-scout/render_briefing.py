@@ -36,7 +36,7 @@ import argparse
 import json
 import re
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -133,7 +133,8 @@ def format_briefing(
         简报文本（按用户原 spec 格式）
     """
     if today is None:
-        today = datetime.now()
+        # 美东日期 = 北京 - 1（对齐 SKILL.md Step 2：北京 9:00 跑 = 美东前一天晚上）
+        today = datetime.now() - timedelta(days=1)
 
     mon = today.strftime("%-m")
     day = today.strftime("%-d")
@@ -179,31 +180,29 @@ def format_briefing(
     persona_data = data.get("personas", {})
 
     for pk in DISPLAY_ORDER:
+        info = persona_data.get(pk)
+        if not info or not info.get("videos"):
+            continue  # v5.4：0 命中的 persona 整个跳过，不写占位行（运营只看有 24h 货的）
+
         pdef = personas.get(pk, {})
         handle = pdef.get("handle", f"@{pk}")
         cap = capitalize_persona(pk)
-
         lines.append(f"**{cap} ({handle})**")
         lines.append("")
 
-        info = persona_data.get(pk)
-        if not info or not info.get("videos"):
-            # v5.1：tier=none → 两档都没命中（tight 仅竖版 + relaxed 横竖不限）
-            lines.append("(24h 内 0 命中 ≤15s 竖版 / ≤30s 兜底模板)")
-        else:
-            # v4.8.1：tier 标签 [15s] / [30s 兜底] 让运营一眼看出哪条是扩搜
-            tier = (info or {}).get("tier_used", "tight")
-            tier_tag = "[15s]" if tier == "tight" else "[30s 兜底]"
-            for v in info["videos"]:
-                title = clean_title(v.get("title_cn") or v.get("title", ""))
-                likes = fmt_likes(v.get("like_count") or 0)
-                url = v.get("url", "")
-                dur = fmt_duration(v.get("duration") or 0)
-                dur_str = f" | {dur}" if dur else ""
-                lines.append(f"**{tier_tag}** {title} | {likes}{dur_str} | {url}")
-                brief = (v.get("fanpai_brief") or "").strip()
-                if brief:
-                    lines.append(f"→ {brief}")
+        # v4.8.1：tier 标签 [15s] / [30s 兜底] 让运营一眼看出哪条是扩搜
+        tier = info.get("tier_used", "tight")
+        tier_tag = "[15s]" if tier == "tight" else "[30s 兜底]"
+        for v in info["videos"]:
+            title = clean_title(v.get("title_cn") or v.get("title", ""))
+            likes = fmt_likes(v.get("like_count") or 0)
+            url = v.get("url", "")
+            dur = fmt_duration(v.get("duration") or 0)
+            dur_str = f" | {dur}" if dur else ""
+            lines.append(f"**{tier_tag}** {title} | {likes}{dur_str} | {url}")
+            brief = (v.get("fanpai_brief") or "").strip()
+            if brief:
+                lines.append(f"→ {brief}")
         lines.append("")
 
     return "\n".join(lines).rstrip() + "\n"

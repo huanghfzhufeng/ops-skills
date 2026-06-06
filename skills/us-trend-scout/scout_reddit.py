@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
 """
-us-trend-scout / scout_reddit.py
+us-trend-scout / scout_reddit.py  (v5.3 — RSS 端点)
 
-拉 17 个精选 Reddit sub 的 24h top 100 → 三层闸门过滤 → 7 天去重 → 输出 candidates.json
+拉 16 个精选 Reddit sub 的 24h top RSS → 两层闸门过滤 → 7 天去重 → 输出 candidates.json
 
-第一层信源（脚本）：Reddit + Google Trends RSS（侧路）
-第二层评估（Claude 在 SKILL.md 里）：每条候选 3 yes 定性判断（v5.2 起取代 v5.0 TAEP 评分）+ 可选 WebSearch 跨平台 cross-check
+为什么是 RSS（v5.3 改动，critical）：
+    Reddit 已封 .json 端点（无 OAuth 一律 HTTP 403，换浏览器 UA / old.reddit.com 均无效）。
+    唯一零配置可达的是 RSS（/r/<sub>/top/.rss?t=day，任何 UA 都能过）。
+    代价：RSS 没有 ups / num_comments。热度信号改用 RSS feed 内排名（rank 字段，
+    feed 本身按 24h 热度排序，#1 即当日该 sub 最热）。
+    RSS 也有滑动窗口限流 → 并发降到 3 + 失败重试，避免批量 403。
+
+第一层信源（脚本）：Reddit RSS + Google Trends RSS（侧路）
+第二层评估（Claude 在 SKILL.md 里）：每条候选 3 yes 定性判断 + 可选 WebSearch 跨平台 cross-check
 
 用法：
     python3 scout_reddit.py --output candidates.json
@@ -32,17 +39,22 @@ from typing import Any
 USER_AGENT = "us-trend-scout/1.0 by u/ops-skills"
 REDDIT_BASE = "https://www.reddit.com"
 TRENDS_RSS = "https://trends.google.com/trending/rss?geo=US"
-DEFAULT_LIMIT = 100  # 每 sub 拉取条数（Reddit API 单次上限）
+DEFAULT_LIMIT = 25  # RSS 单 feed 上限（Reddit RSS 固定 ~25，与 .json 的 100 不同）
+MAX_CANDIDATES = 120  # 候选池上限：RSS 无 ups/comments，按 rank 排序后取前 N 给 Claude，砍各大 sub 长尾
 FETCH_TIMEOUT = 15
-FETCH_WORKERS = 8  # 并发数（避免 Reddit rate limit）
+FETCH_WORKERS = 3  # 并发数（RSS 限流敏感，v5.3 从 8 降到 3）
+FETCH_RETRIES = 2  # 单 sub 失败重试次数（403/429/网络抖动）
+RETRY_BACKOFF = 3  # 重试退避基数秒（第 n 次等 n*RETRY_BACKOFF）
 
-# 精选 sub（按测试结果调整 — v2 修正错名 sub）
+ATOM_NS = {"a": "http://www.w3.org/2005/Atom"}
+
+# 精选 sub（按测试结果调整）
 SUBS = [
     # 核心：文化引爆点金矿
     "OutOfTheLoop",
     # 美妆
     "AsianBeauty", "Sephora", "30PlusSkinCare",
-    # 时尚（v2: 修正 sub 名）
+    # 时尚
     "streetwear", "femalefashionadvice",
     # 健康
     "loseit", "biohackers",
@@ -54,9 +66,11 @@ SUBS = [
     "movies", "television", "popculture",
 ]
 
-# ─── 三层闸门规则 ──────────────────────────────────────────────────────────
+# ─── 闸门规则 ──────────────────────────────────────────────────────────────
+# 注意（v5.3）：原"闸门 3 注意力阈值（ups/comments）"已删除 —— RSS 无此数据。
+# 热度由 RSS feed 排名（rank）隐含表达：能上某 sub 24h top RSS 即足够热。
 
-# 闸门 1：24h 硬窗口（由代码强制）
+# 闸门 1：24h 硬窗口（由代码强制，用 RSS published 时间戳）
 MAX_AGE_HOURS = 24
 
 # 闸门 2a：title 关键词排除（主题）
@@ -78,9 +92,8 @@ EXCLUDE_FORM = [
     "is this normal", "am i the only",
 ]
 
-# 闸门 2c：source-subreddit 黑名单（按 r/popular crosspost 来源排除娱乐性内容）
-# v2 大幅扩展 — 第一轮测试发现 30+ 个娱乐/体育/fandom sub 漏过
-# 这是核心改进：r/popular 96% 通过率里 80% 来自这些娱乐 sub crosspost
+# 闸门 2c：source-subreddit 黑名单（RSS 的 <category term="..."> 给出真实来源 sub，
+# 含 r/popular 聚合进来的 crosspost 原 sub —— 已实测可用）
 EXCLUDE_SOURCE_SUB = {
     # 动物/萌宠
     "aww", "cats", "dogs", "AnimalsBeingBros", "rarepuppers", "eyebleach",
@@ -141,7 +154,6 @@ EXCLUDE_SOURCE_SUB = {
     # 其他
     "BuyFromEU", "shittyrobots", "SubredditDrama", "OutOfTheLoop_Drama",
     "HilariousAffronts", "mildlyfunny",
-    # v3 补：第二轮测试发现的漏过 sub
     "nostalgia", "Unexpected", "countwithchickenlady", "lovethissmug",
     "Fauxmoi",  # 名人八卦，娱乐性
     # 个人作品/手作 sub
@@ -163,31 +175,7 @@ EXCLUDE_SOURCE_SUB = {
     "GameOfThrones", "HouseOfTheDragon", "RingsOfPower", "WheelOfTime",
     "Stranger_Things", "TheOffice", "PeakyBlinders",
 }
-
-# 闸门 2d：flair 关键词排除
-EXCLUDE_FLAIR = [
-    "DOGGO", "Wholesome", "Cute", "Funny", "Made Me Smile",
-    "Animal", "Pet", "Cat", "Dog", "Puppy", "Kitten",
-    "Shitpost", "Meme",
-]
-
-# 闸门 3：注意力阈值（按 sub 调）
-THRESHOLDS = {
-    # 核心金矿（量少质高，阈值偏低）
-    "OutOfTheLoop": {"ups": 100, "comments": 15},
-    # niche 科技 sub（顶帖天花板低）
-    "artificial": {"ups": 20, "comments": 10},
-    "OpenAI": {"ups": 100, "comments": 30},
-    # 冷门兜底（保留但调低）
-    "popculture": {"ups": 30, "comments": 15},
-    "30PlusSkinCare": {"ups": 30, "comments": 15},
-    "femalefashion": {"ups": 30, "comments": 15},
-    "streetweardiscussion": {"ups": 30, "comments": 15},
-    "biohackers": {"ups": 50, "comments": 20},
-    "loseit": {"ups": 100, "comments": 50},  # 个人帖多，阈值提高
-    # 默认（适用 popular / news / technology / movies / television / AsianBeauty / Sephora）
-    "DEFAULT": {"ups": 200, "comments": 50},
-}
+_EXCLUDE_SOURCE_SUB_LOWER = {s.lower() for s in EXCLUDE_SOURCE_SUB}
 
 # 去重默认配置
 DEFAULT_HISTORY_PATH = "~/.config/ops-skills/us-trend-history.json"
@@ -203,41 +191,100 @@ def http_get(url: str, accept_xml: bool = False) -> bytes:
         url,
         headers={
             "User-Agent": USER_AGENT,
-            "Accept": "application/xml" if accept_xml else "application/json",
+            "Accept": "application/rss+xml" if accept_xml else "application/json",
         },
     )
     with urllib.request.urlopen(req, timeout=FETCH_TIMEOUT) as resp:
         return resp.read()
 
 
+def parse_content(content_html: str, permalink: str) -> tuple[str, str]:
+    """从 RSS <content> 的 HTML 里提取（外链 url, 正文文本）。
+
+    link post：content 含指向站外的 [link] href → 取为 url。
+    self post：无站外链接 → url 回落到 permalink。
+    正文：去 HTML 标签 + 实体 + Reddit RSS 固定噪声（submitted by / [link] / [comments]）。
+    """
+    external = ""
+    for u in re.findall(r'href="([^"]+)"', content_html):
+        if "reddit.com" in u or "redd.it" in u:
+            continue
+        external = u
+        break
+    text = re.sub(r"<[^>]+>", " ", content_html)
+    text = re.sub(r"&#?\w+;", " ", text)
+    text = re.sub(r"submitted by\s+/u/\S+", "", text)
+    text = text.replace("[link]", "").replace("[comments]", "")
+    text = " ".join(text.split())
+    return (external or permalink), text[:600]
+
+
+def parse_atom(body: bytes, fetched_from: str) -> list[dict[str, Any]]:
+    """解析单个 sub 的 Atom RSS，返回 entry dict 列表（含 feed 内 rank）。"""
+    root = ET.fromstring(body)
+    entries: list[dict[str, Any]] = []
+    for idx, e in enumerate(root.findall("a:entry", ATOM_NS), start=1):
+        title = (e.findtext("a:title", "", ATOM_NS) or "").strip()
+        link_el = e.find("a:link", ATOM_NS)
+        permalink = link_el.attrib.get("href", "") if link_el is not None else ""
+        published = (e.findtext("a:published", "", ATOM_NS) or "").strip()
+        post_id = (e.findtext("a:id", "", ATOM_NS) or "").strip()  # t3_xxx
+        cat_el = e.find("a:category", ATOM_NS)
+        source_sub = cat_el.attrib.get("term", "") if cat_el is not None else fetched_from
+        content_el = e.find("a:content", ATOM_NS)
+        content_html = (content_el.text or "") if content_el is not None else ""
+        try:
+            created_ts = datetime.fromisoformat(published).timestamp() if published else 0.0
+        except ValueError:
+            created_ts = 0.0
+        entries.append({
+            "title": title,
+            "permalink": permalink,
+            "created_ts": created_ts,
+            "post_id": post_id,
+            "source_sub": source_sub or fetched_from,
+            "content_html": content_html,
+            "rank": idx,
+            "fetched_from": fetched_from,
+        })
+    return entries
+
+
 def fetch_sub(sub: str, limit: int = DEFAULT_LIMIT) -> tuple[str, list[dict[str, Any]], str | None]:
-    """拉单个 sub 的 24h top。返回 (sub, posts, error_msg)。"""
-    url = f"{REDDIT_BASE}/r/{sub}/top.json?t=day&limit={limit}"
-    try:
-        body = http_get(url)
-        data = json.loads(body)
-        if "error" in data:
-            return sub, [], f"API error: {data.get('message', data.get('error'))}"
-        posts = data.get("data", {}).get("children", [])
-        return sub, posts, None
-    except urllib.error.HTTPError as e:
-        return sub, [], f"HTTP {e.code}"
-    except urllib.error.URLError as e:
-        return sub, [], f"URL error: {e.reason}"
-    except json.JSONDecodeError:
-        return sub, [], "JSON parse fail (sub may be private)"
-    except Exception as e:
-        return sub, [], f"unexpected: {type(e).__name__}: {e}"
+    """拉单个 sub 的 24h top RSS，带重试。返回 (sub, entries, error_msg)。"""
+    url = f"{REDDIT_BASE}/r/{sub}/top/.rss?t=day&limit={limit}"
+    last_err = "unknown"
+    for attempt in range(FETCH_RETRIES + 1):
+        try:
+            body = http_get(url, accept_xml=True)
+            return sub, parse_atom(body, sub), None
+        except urllib.error.HTTPError as e:
+            last_err = f"HTTP {e.code}"
+            if e.code in (403, 429, 500, 502, 503) and attempt < FETCH_RETRIES:
+                time.sleep(RETRY_BACKOFF * (attempt + 1))
+                continue
+            return sub, [], last_err
+        except urllib.error.URLError as e:
+            last_err = f"URL error: {e.reason}"
+            if attempt < FETCH_RETRIES:
+                time.sleep(RETRY_BACKOFF * (attempt + 1))
+                continue
+            return sub, [], last_err
+        except ET.ParseError as e:
+            return sub, [], f"XML parse fail: {e}"
+        except Exception as e:
+            return sub, [], f"unexpected: {type(e).__name__}: {e}"
+    return sub, [], last_err
 
 
 def fetch_all_subs(subs: list[str]) -> dict[str, Any]:
-    """并发拉所有 sub。返回 {sub: {posts, error}}。"""
+    """并发拉所有 sub 的 RSS。返回 {sub: {entries, error}}。"""
     results: dict[str, Any] = {}
     with ThreadPoolExecutor(max_workers=FETCH_WORKERS) as ex:
         futures = {ex.submit(fetch_sub, s): s for s in subs}
         for fut in as_completed(futures):
-            sub, posts, err = fut.result()
-            results[sub] = {"posts": posts, "error": err}
+            sub, entries, err = fut.result()
+            results[sub] = {"entries": entries, "error": err}
     return results
 
 
@@ -271,35 +318,17 @@ def fetch_google_trends() -> tuple[list[dict[str, Any]], str | None]:
 # ─── 过滤层 ────────────────────────────────────────────────────────────────
 
 
-def extract_source_sub(permalink: str, url: str) -> str:
-    """从 permalink / url 解析 source subreddit（区分大小写敏感问题，统一小写比对）。"""
-    for s in (permalink, url):
-        m = re.search(r"/r/([A-Za-z0-9_]+)/", s)
-        if m:
-            return m.group(1)
-    return ""
-
-
-def filter_post(post: dict[str, Any], fetched_from: str, now_ts: float) -> tuple[bool, str | None]:
-    """三层闸门。返回 (是否通过, drop 原因)。"""
-    d = post.get("data", {}) or {}
-    title = (d.get("title") or "")
+def filter_entry(entry: dict[str, Any], now_ts: float) -> tuple[bool, str | None]:
+    """两层闸门（24h + title/source-sub 黑名单）。返回 (是否通过, drop 原因)。"""
+    title = entry["title"]
     tl = title.lower()
-    ups = int(d.get("ups") or 0)
-    comments = int(d.get("num_comments") or 0)
-    created = float(d.get("created") or 0)
+    created = entry["created_ts"]
     age_h = (now_ts - created) / 3600 if created else 999
-    source_sub = extract_source_sub(d.get("permalink", ""), d.get("url", ""))
-    flair = (d.get("link_flair_text") or "").strip()
+    source_sub = entry["source_sub"]
 
     # 闸门 1：24h 硬过滤
     if age_h > MAX_AGE_HOURS:
         return False, f"age {age_h:.1f}h > {MAX_AGE_HOURS}h"
-    # 排除 stickied / NSFW
-    if d.get("stickied"):
-        return False, "stickied"
-    if d.get("over_18"):
-        return False, "NSFW"
 
     # 闸门 2a/b：title 关键词
     for kw in EXCLUDE_TOPIC:
@@ -309,44 +338,27 @@ def filter_post(post: dict[str, Any], fetched_from: str, now_ts: float) -> tuple
         if kw in tl:
             return False, f"form kw '{kw}'"
 
-    # 闸门 2c：source sub 黑名单（针对 popular/news 的 crosspost）
-    if source_sub and source_sub != fetched_from:
-        # 这是 crosspost，检查源 sub 是否在黑名单
-        if source_sub.lower() in {s.lower() for s in EXCLUDE_SOURCE_SUB}:
-            return False, f"src sub '{source_sub}' in exclude list"
-
-    # 闸门 2d：flair 黑名单
-    if flair:
-        flair_lower = flair.lower()
-        for kw in EXCLUDE_FLAIR:
-            if kw.lower() in flair_lower:
-                return False, f"flair '{flair}' matches '{kw}'"
-
-    # 闸门 3：阈值
-    threshold = THRESHOLDS.get(fetched_from, THRESHOLDS["DEFAULT"])
-    if ups < threshold["ups"]:
-        return False, f"ups {ups} < {threshold['ups']}"
-    if comments < threshold["comments"]:
-        return False, f"comments {comments} < {threshold['comments']}"
+    # 闸门 2c：source sub 黑名单（RSS category 给出真实来源 sub）
+    if source_sub and source_sub.lower() in _EXCLUDE_SOURCE_SUB_LOWER:
+        return False, f"src sub '{source_sub}' in exclude list"
 
     return True, None
 
 
-def normalize_post(post: dict[str, Any], fetched_from: str, now_ts: float) -> dict[str, Any]:
+def normalize_entry(entry: dict[str, Any], now_ts: float) -> dict[str, Any]:
     """提取候选需要的字段（结构化输出给 Claude）。"""
-    d = post.get("data", {}) or {}
+    created = entry["created_ts"]
+    url, selftext = parse_content(entry["content_html"], entry["permalink"])
     return {
-        "title": d.get("title") or "",
-        "ups": int(d.get("ups") or 0),
-        "comments": int(d.get("num_comments") or 0),
-        "age_h": round((now_ts - float(d.get("created") or 0)) / 3600, 1),
-        "permalink": f"https://reddit.com{d.get('permalink', '')}",
-        "url": d.get("url") or "",
-        "fetched_from": fetched_from,
-        "source_sub": extract_source_sub(d.get("permalink", ""), d.get("url", "")),
-        "flair": (d.get("link_flair_text") or "").strip(),
-        "selftext": (d.get("selftext") or "")[:600],
-        "upvote_ratio": d.get("upvote_ratio"),
+        "title": entry["title"],
+        "rank": entry["rank"],  # RSS feed 内 24h top 排名（热度信号，替代 ups/comments）
+        "age_h": round((now_ts - created) / 3600, 1) if created else 999.0,
+        "permalink": entry["permalink"],
+        "url": url,
+        "fetched_from": entry["fetched_from"],
+        "source_sub": entry["source_sub"],
+        "post_id": entry["post_id"],
+        "selftext": selftext,
     }
 
 
@@ -354,12 +366,13 @@ def normalize_post(post: dict[str, Any], fetched_from: str, now_ts: float) -> di
 
 
 def fingerprint(post: dict[str, Any]) -> dict[str, Any]:
-    """生成帖子指纹（标题归一化 + permalink）。"""
+    """生成帖子指纹（标题归一化 + post_id + permalink）。"""
     title = post["title"].lower()
     title_norm = re.sub(r"[^\w\s]", " ", title)
     title_norm = " ".join(title_norm.split())[:120]
     return {
         "title_norm": title_norm,
+        "post_id": post.get("post_id", ""),
         "permalink": post["permalink"],
     }
 
@@ -387,6 +400,8 @@ def is_dup(post: dict[str, Any], history: list[dict[str, Any]]) -> tuple[bool, s
     """跟历史比对。返回 (是否重复, 命中描述)。"""
     fp = fingerprint(post)
     for h in history:
+        if fp["post_id"] and fp["post_id"] == h.get("post_id"):
+            return True, f"same post_id {fp['post_id']}"
         if fp["permalink"] == h.get("permalink"):
             return True, f"same permalink {h['permalink']}"
         sim = jaccard(fp["title_norm"], h.get("title_norm", ""))
@@ -413,7 +428,7 @@ def save_history(passed: list[dict[str, Any]], history: list[dict[str, Any]], pa
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n")[2])
+    parser = argparse.ArgumentParser(description=__doc__.split("\n")[1])
     parser.add_argument("--output", default="candidates.json", help="输出 JSON 路径（默认 candidates.json）")
     parser.add_argument("--history", default=DEFAULT_HISTORY_PATH, help="7 天去重历史文件路径")
     parser.add_argument("--no-dedupe", action="store_true", help="跳过去重（首次跑或调试用）")
@@ -424,7 +439,7 @@ def main() -> int:
     now = time.time()
     history_path = Path(args.history).expanduser()
 
-    print(f"[scout] fetching {len(SUBS)} subs (limit={DEFAULT_LIMIT}, workers={FETCH_WORKERS})…", file=sys.stderr)
+    print(f"[scout] fetching {len(SUBS)} subs via RSS (limit={DEFAULT_LIMIT}, workers={FETCH_WORKERS}, retries={FETCH_RETRIES})…", file=sys.stderr)
     sub_results = fetch_all_subs(SUBS)
 
     trends, trends_err = ([], None)
@@ -438,30 +453,32 @@ def main() -> int:
     per_sub_stats: dict[str, dict[str, int]] = {}
 
     for sub, res in sub_results.items():
-        raw = res["posts"]
+        raw = res["entries"]
         if res["error"]:
             per_sub_stats[sub] = {"raw": 0, "passed": 0, "error": res["error"]}
             continue
         passed_n = 0
-        for p in raw:
-            ok, reason = filter_post(p, sub, now)
+        for entry in raw:
+            ok, reason = filter_entry(entry, now)
             if ok:
-                candidates.append(normalize_post(p, sub, now))
+                candidates.append(normalize_entry(entry, now))
                 passed_n += 1
             elif args.verbose and reason:
-                drop_reasons[reason.split()[0]] = drop_reasons.get(reason.split()[0], 0) + 1
+                key = reason.split()[0]
+                drop_reasons[key] = drop_reasons.get(key, 0) + 1
         per_sub_stats[sub] = {"raw": len(raw), "passed": passed_n}
 
     pre_dedup_n = len(candidates)
 
-    # 同跑内去重（同一条 crosspost 到多个 sub 只保留一次，按 ups 高的留）
-    seen_permalinks: dict[str, dict[str, Any]] = {}
+    # 同跑内去重（同一帖被多个 sub 收录，如 popular 聚合，按 post_id/permalink 留一次）
+    seen: dict[str, dict[str, Any]] = {}
     for c in candidates:
-        pl = c["permalink"]
-        if pl not in seen_permalinks or c["ups"] > seen_permalinks[pl]["ups"]:
-            seen_permalinks[pl] = c
-    intra_dedup_dropped = len(candidates) - len(seen_permalinks)
-    candidates = list(seen_permalinks.values())
+        key = c["post_id"] or c["permalink"]
+        # 保留 rank 更靠前（更热）的那条
+        if key not in seen or c["rank"] < seen[key]["rank"]:
+            seen[key] = c
+    intra_dedup_dropped = len(candidates) - len(seen)
+    candidates = list(seen.values())
 
     # 跨天历史去重
     history: list[dict[str, Any]] = []
@@ -480,12 +497,19 @@ def main() -> int:
         candidates = kept
     deduped_count = intra_dedup_dropped + history_deduped
 
-    # 排序：upvote desc
-    candidates.sort(key=lambda x: -x["ups"])
+    # 排序：rank 升序（各 sub 头部热帖优先），同 rank 取更新的
+    candidates.sort(key=lambda x: (x["rank"], x["age_h"]))
+
+    # 全局收敛：取按 rank 排序后的前 N 条（砍各大 sub 长尾，垂类小 sub 头部因 rank 小自然保留）
+    pre_cap_n = len(candidates)
+    cap_dropped = max(0, pre_cap_n - MAX_CANDIDATES)
+    candidates = candidates[:MAX_CANDIDATES]
 
     # 输出
     output = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
+        "source": "reddit RSS (/top/.rss?t=day) — .json 端点已被 Reddit 封禁",
+        "heat_signal": "rank = RSS feed 内 24h top 排名（越小越热）；RSS 无 ups/comments",
         "stats": {
             "subs_attempted": len(SUBS),
             "subs_succeeded": sum(1 for s in per_sub_stats.values() if not s.get("error")),
@@ -493,6 +517,7 @@ def main() -> int:
             "passed_filter": pre_dedup_n,
             "intra_dedup_dropped": intra_dedup_dropped,
             "history_deduped": history_deduped,
+            "cap_dropped": cap_dropped,
             "final_candidates": len(candidates),
             "trends_items": len(trends),
             "trends_error": trends_err,
@@ -509,7 +534,12 @@ def main() -> int:
 
     # 简洁报告到 stderr
     print(f"[scout] done: {pre_dedup_n} passed filter → {deduped_count} deduped → {len(candidates)} final → {args.output}", file=sys.stderr)
-    print(f"[scout] per-sub: " + " ".join(f"r/{s}:{st['passed']}/{st['raw']}" for s, st in sorted(per_sub_stats.items())), file=sys.stderr)
+    print("[scout] per-sub: " + " ".join(
+        f"r/{s}:{st['passed']}/{st['raw']}" + ("!" if st.get("error") else "")
+        for s, st in sorted(per_sub_stats.items())), file=sys.stderr)
+    errored = {s: st["error"] for s, st in per_sub_stats.items() if st.get("error")}
+    if errored:
+        print(f"[scout] sub errors: {errored}", file=sys.stderr)
     if trends_err:
         print(f"[scout] trends error: {trends_err}", file=sys.stderr)
     if args.verbose and drop_reasons:

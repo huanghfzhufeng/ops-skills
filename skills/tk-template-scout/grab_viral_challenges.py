@@ -294,7 +294,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="自动化全平台挑战样本抓取 + 时间窗验证")
     parser.add_argument("--candidates", type=Path,
                         help="候选 JSON 文件路径（默认从 stdin 读）")
-    parser.add_argument("--cookies", type=Path, default=Path("/tmp/tiktok-cookies.txt"))
+    parser.add_argument("--cookies", type=Path, default=None,
+                        help="cookies 文件路径。未指定时优先 ~/.config/ops-skills/tiktok-cookies.txt"
+                             "（持久，跨天不被 /tmp 清），不存在则 fallback /tmp/tiktok-cookies.txt")
     parser.add_argument("--max-age-days", type=int, default=DEFAULT_MAX_AGE_DAYS,
                         help="样本视频最大年龄（天）。超过即丢弃。默认 7。")
     parser.add_argument("--parallel", type=int, default=DEFAULT_PARALLEL,
@@ -304,6 +306,11 @@ def main() -> None:
     parser.add_argument("--yt-dlp-parallel", type=int, default=6)
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
+
+    # cookies 路径解析（v5.4）：未显式指定时优先持久目录，避免 /tmp 跨天被清（与 scout_strict 一致）
+    if args.cookies is None:
+        persistent = Path.home() / ".config" / "ops-skills" / "tiktok-cookies.txt"
+        args.cookies = persistent if persistent.exists() else Path("/tmp/tiktok-cookies.txt")
 
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,

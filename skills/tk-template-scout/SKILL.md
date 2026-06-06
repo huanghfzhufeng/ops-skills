@@ -179,10 +179,10 @@ scout.py 用 yt-dlp + `--cookies-from-browser chrome` 抓每个 URL 的真实点
 3. 对每个挑战，调 scout_strict.py 抓 1 个样本视频（**挑战样本不限时长**，看格式不是看仿拍）：
    ```bash
    python3 scout_strict.py --keywords <(echo "ch1: { keywords: ['<挑战 hashtag 名>'] }") \
-     --source both --top-n 1 --max-duration 0 --max-age-hours 168 \
+     --source both --top-n 1 --tight-max 9999 --max-age-hours 168 \
      > /tmp/challenge-sample-1.json
    ```
-   `--max-duration 0` 关闭时长过滤；`--max-age-hours 168` 放宽到 1 周（挑战样本不要求 24h 内）
+   `--tight-max 9999` 关闭时长过滤（挑战样本不看时长只看格式）；`--max-age-hours 168` 放宽到 1 周（挑战样本不要求 24h 内）
 
 4. 把 3 个挑战的元数据写到 `result.json` 的 `viral_challenges` 字段：
    ```json
@@ -372,18 +372,21 @@ python3 "<skill-dir>/scout_strict.py" \
   --keywords "$KEYWORDS" \
   --max-age-hours 24 \
   --top-n 1 \
-  --max-duration 15 \
+  --source both \
   --parallel 4 \
+  --yt-dlp-parallel 4 \
   --min-likes-warn 500 \
   > result.json 2> strict.log
 ```
 
 参数：
 - `--top-n 1`（v4.6.0 默认）：每 persona 只取最热 1 条
-- `--max-duration 15`（v4.6.0 默认）：硬过滤 >15s 视频，不进 Top
-- `--parallel 4`：Playwright worker 数（每个复用 1 个 browser context 跑多个 hashtag，避免重复创建）
-- `--scrolls 3`：每个 hashtag 页滚动加载次数
-- `--retry 2`：单 hashtag 失败重试次数
+- `--source both`（v5.3 默认，原为 search）：search + hashtag 双源。search 源单独跑偶尔抽风（某些词返回 0 raw），hashtag 源补上漏抓，覆盖率从 ~12 提到 ~18-20。代价：抓取翻倍（~14 分钟）
+- 时长用默认 `--tight-max 15` / `--relaxed-max 30`（tier 1 ≤15s，0 命中兜底 ≤30s）。**注：不存在 `--max-duration` 参数，旧文档写错了，加了会 exit 2**
+- `--parallel 4`：Playwright worker 数（每个复用 1 个 browser context）
+- `--yt-dlp-parallel 4`（v5.3 从 6 降到 4）：yt-dlp 并发。配合 `fetch_metadata_for_all` 的抗限流重试（失败率 ≥40% 判定限流 → sleep 后只重试失败的，最多 2 轮），避免 both 双源抓太多触发 TikTok 限流、元数据整批全挂（v5.2 踩过：63 候选 yt-dlp 全 fail、personas_with_data=0）
+- `--scrolls 3`：每页滚动加载次数（**别调高，scrolls 6 + both 实测会触发限流**）
+- `--retry 2`：单页失败重试次数
 - `--min-likes-warn 500`：Top1 点赞低于这个值的 persona 会被标 `low_heat_warning: true`
 
 脚本会自动从 Chrome 导 cookies 到 `/tmp/tiktok-cookies.txt`，如果 cookies 已存在则直接复用。
