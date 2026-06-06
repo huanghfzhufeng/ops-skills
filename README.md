@@ -5,13 +5,14 @@
 
 美区 TikTok 矩阵号运营自动化工具集。[huanghfzhufeng](https://github.com/huanghfzhufeng) 出品。
 
-## 包含的 Skill（4 个）
+## 包含的 Skill（5 个）
 
 | Skill | 干啥 | 触发 |
 |---|---|---|
 | **us-trend-scout** | 每天抓美区 Reddit 24h **文化趋势**热点（RSS 拉 16 个精选 sub）→ 配 26 数字角色出创意 → 简报推飞书 | 「跑一次热点」/「美区热点」 |
 | **tk-template-scout** | 26 人 × 3 词搜 TikTok 真实视频（Playwright + 24h 硬过滤）+ 全平台挑战 Top 3 → 每人 Top 模板供仿拍 → 简报推飞书 | 「跑一次 TK 模板」 |
 | **sge-blog-watcher** | 监听 Social Growth Engineers 博客，发现新文章立刻推飞书群（中文标题 + 摘要 + TL;DR + 原文链接，一篇一卡片） | 定时 / 「跑一次 sge」 |
+| **analyzer-watch** | 监听 TikTok Analyzer 后台，自家号视频**播放破 500 或 ER 破 5%** 立刻推飞书群（账号 + 播放/ER + 互动数 + 视频链接，一条一卡） | 定时 / 「爆款预警」 |
 | **xcmo-mobile** | 按邮箱 + 日期从 xcmo 拉视频 → 按人物分组 → 起本地服务 + 二维码 → 手机扫码看视频 / 复制文案 | 「下载 \<邮箱\> \<日期\>」 |
 
 > us-trend-scout 抓的是 **Reddit 文化趋势**（影视娱乐 / meme / 时尚美妆 / 生活方式情绪 / 名人文化），不是硬社会新闻；tk-template-scout 抓的是 **TikTok 平台内模板**。两者错位互补，同一天跑互不重复。
@@ -197,6 +198,24 @@ python3 skills/tk-template-scout/scout_strict.py --source both --scrolls 6 --key
 
 ---
 
+## analyzer-watch 用法
+
+监听 **TikTok Analyzer**（自建账号数据后台），自家号视频 **播放破 500 或 ER 破 5%** 立刻推飞书群。
+
+```
+触发：定时（每 30 分钟）/ 跟 Claude 说「爆款预警」「analyzer-watch」
+```
+
+- `watch.py run` 一把梭：JWT 登录 → 查 `daily`(当天)+`trending`(热门) → 筛破阈值 → diff `seen` → 逐条推飞书卡片
+- 首次 baseline 不推历史，之后只推**新破阈值的**（增量去重，对称 sge-blog-watcher）
+- 阈值 / 凭证 / webhook 都在 `~/.config/ops-skills/analyzer-watch.yaml` 可调
+
+```
+/schedule create "*/30 * * * *" "run skill analyzer-watch"
+```
+
+---
+
 ## xcmo-mobile 用法
 
 ```
@@ -244,6 +263,10 @@ ops-skills/
 │   │   ├── render_card.py          # 飞书卡片渲染
 │   │   ├── translate_prompt.md
 │   │   └── requirements.txt
+│   ├── analyzer-watch/
+│   │   ├── SKILL.md
+│   │   ├── watch.py                # 登录 analyzer + 查指标 + 筛破阈值 + 去重 + 推飞书卡片
+│   │   └── requirements.txt        # 纯标准库，无依赖
 │   └── xcmo-mobile/
 │       ├── SKILL.md
 │       ├── mobile.py
