@@ -50,8 +50,15 @@ def load_config() -> dict:
     text = CONFIG_FILE.read_text(encoding="utf-8")
 
     def g(key: str, default: str | None = None) -> str | None:
-        m = re.search(rf'^{key}:\s*"?([^"\n]+?)"?\s*$', text, re.M)
-        return m.group(1).strip() if m else default
+        m = re.search(rf'^{re.escape(key)}:\s*(.+?)\s*$', text, re.M)
+        if not m:
+            return default
+        val = m.group(1).strip()
+        if val and val[0] in "\"'":            # 带引号：取引号内，值里的 # 不算注释
+            q = val[0]
+            end = val.find(q, 1)
+            return val[1:end] if end > 0 else val[1:]
+        return re.split(r"\s+#", val, 1)[0].strip()  # 无引号：剥掉行内 # 注释
 
     cfg = {
         "base_url": (g("base_url") or "").rstrip("/"),
