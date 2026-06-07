@@ -133,11 +133,13 @@ class TestFormatBriefing:
         first_line = result.split("\n")[0]
         assert first_line == "TK模板日推 | 5月24日（周日）"
 
-    def test_persona_no_data_shows_zero_hit(self, sample_personas, fixed_date) -> None:
+    def test_all_zero_hit_personas_skipped(self, sample_personas, fixed_date) -> None:
+        """v5.4：全部 persona 0 命中时整段跳过，只剩标题行（不写占位）。"""
         data = {"personas": {}}
         result = render_briefing.format_briefing(data, sample_personas, today=fixed_date)
-        assert "Sophie (@sophie.fits2)" in result
-        assert "(24h 内 0 命中 ≤15s / ≤30s 竖版模板)" in result
+        assert "Sophie (@sophie.fits2)" not in result
+        assert "0 命中" not in result
+        assert result.strip() == "TK模板日推 | 5月24日（周日）"
 
     def test_persona_with_videos_shows_three_lines(self, sample_personas, fixed_date) -> None:
         data = {
@@ -160,24 +162,25 @@ class TestFormatBriefing:
         assert "video C | 3.5K赞 | https://www.tiktok.com/@c/video/3" in result
 
     def test_persona_order_matches_spec(self, sample_personas, fixed_date) -> None:
-        data = {"personas": {}}
+        # v5.4：只渲染有命中的；给 sophie/ava/ezra/leo 命中，验证按 DISPLAY_ORDER 顺序
+        vids = [{"title": "x", "like_count": 100, "url": "https://x"}]
+        data = {"personas": {k: {"videos": vids} for k in ("sophie", "ava", "ezra", "leo")}}
         result = render_briefing.format_briefing(data, sample_personas, today=fixed_date)
-        # 检查前几个 persona 出现的顺序
         sophie_idx = result.find("Sophie (")
         ava_idx = result.find("Ava (")
         ezra_idx = result.find("Ezra (")
         leo_idx = result.find("Leo (")
-        assert sophie_idx < ava_idx < ezra_idx, "Order: Sophie → Ava → Ezra"
-        assert leo_idx > 0, "Leo 在末尾"
-        assert leo_idx == max(sophie_idx, ava_idx, ezra_idx, leo_idx), "Leo 是最后"
+        assert sophie_idx < ava_idx < ezra_idx < leo_idx, "顺序: Sophie → Ava → Ezra → Leo"
 
-    def test_all_26_personas_appear(self, sample_personas, fixed_date) -> None:
-        data = {"personas": {}}
+    def test_only_hit_personas_appear(self, sample_personas, fixed_date) -> None:
+        """v5.4：只有有命中的 persona 出现，0 命中的不出现。"""
+        vids = [{"title": "x", "like_count": 100, "url": "https://x"}]
+        data = {"personas": {"sophie": {"videos": vids}, "jade": {"videos": vids}}}
         result = render_briefing.format_briefing(data, sample_personas, today=fixed_date)
-        for pk in render_briefing.DISPLAY_ORDER:
-            handle = sample_personas[pk]["handle"]
-            cap = render_briefing.capitalize_persona(pk)
-            assert f"{cap} ({handle})" in result, f"Missing {pk}"
+        assert "Sophie (@sophie.fits2)" in result
+        assert "Jade (@its.jade_9)" in result
+        assert "Ava (@ava.glow3)" not in result
+        assert "Leo (@leo.thoughts0)" not in result
 
     def test_title_cn_takes_priority_over_title(self, sample_personas, fixed_date) -> None:
         """v4.5.0：title_cn 存在时优先用，fallback 才用 raw title"""
@@ -268,7 +271,7 @@ class TestFormatBriefing:
                     "fanpai_brief": "26 人都能蹭，建议 Iris 先拍",
                 },
             ],
-            "personas": {},
+            "personas": {"sophie": {"videos": [{"title": "x", "like_count": 100, "url": "https://x"}]}},
         }
         result = render_briefing.format_briefing(data, sample_personas, today=fixed_date)
         # 挑战块在 Sophie segment 之前
@@ -289,11 +292,12 @@ class TestFormatBriefing:
         assert "全平台热门挑战" not in result
         assert "—— 以下为各赛道 Top 1 ——" not in result
 
-    def test_zero_hit_uses_v460_wording(self, sample_personas, fixed_date) -> None:
-        """v4.6.0：0 命中文案改成「24h 内 0 命中 ≤15s 模板」"""
+    def test_zero_hit_no_placeholder_wording(self, sample_personas, fixed_date) -> None:
+        """v5.4：0 命中不再写任何占位文案（旧 v4.6.0 的「0 命中 ≤15s 模板」已废除）。"""
         data = {"personas": {}}
         result = render_briefing.format_briefing(data, sample_personas, today=fixed_date)
-        assert "(24h 内 0 命中 ≤15s / ≤30s 竖版模板)" in result
+        assert "0 命中" not in result
+        assert "≤15s" not in result
 
     def test_fanpai_brief_empty_no_arrow_line(self, sample_personas, fixed_date) -> None:
         """没有 fanpai_brief 时不要打 → 空行"""
@@ -337,13 +341,13 @@ class TestFormatBriefing:
 
     def test_uses_at_handle_format(self, sample_personas, fixed_date) -> None:
         """格式是 Sophie (@sophie.fits2)，不是 Sophie | @sophie.fits2"""
-        data = {"personas": {}}
+        data = {"personas": {"sophie": {"videos": [{"title": "x", "like_count": 100, "url": "https://x"}]}}}
         result = render_briefing.format_briefing(data, sample_personas, today=fixed_date)
         assert "Sophie (@sophie.fits2)" in result
         assert "Sophie | @sophie.fits2" not in result
 
-    def test_persona_missing_from_data_still_shows(self, sample_personas, fixed_date) -> None:
-        """scout 输出可能没有某个 persona，简报仍要按 26 人顺序显示 (0 命中)。"""
+    def test_persona_missing_from_data_skipped(self, sample_personas, fixed_date) -> None:
+        """v5.4：scout 输出没有的 persona（= 0 命中）整段跳过，不显示。"""
         data = {
             "personas": {
                 "sophie": {"videos": [{"title": "x", "like_count": 100, "url": "https://x"}]},
@@ -351,13 +355,8 @@ class TestFormatBriefing:
             },
         }
         result = render_briefing.format_briefing(data, sample_personas, today=fixed_date)
-        # ava 段仍应该出现
-        assert "Ava (@ava.glow3)" in result
-        # 且显示 0 命中
-        ava_pos = result.find("Ava (@ava.glow3)")
-        ezra_pos = result.find("Ezra (@ezra.style2)")
-        ava_section = result[ava_pos:ezra_pos]
-        assert "(24h 内 0 命中 ≤15s / ≤30s 竖版模板)" in ava_section
+        assert "Sophie (@sophie.fits2)" in result
+        assert "Ava (@ava.glow3)" not in result  # 缺失 = 0 命中 = 跳过
 
 
 # ---------- 日期 / 星期映射 ----------
