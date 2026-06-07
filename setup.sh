@@ -14,7 +14,7 @@
 #   2. 装 yt-dlp（Homebrew or pip）
 #   3. 装 Python 包：qrcode pillow PyYAML playwright playwright-stealth
 #   4. 装 Playwright chromium（~200MB 一次性下载）
-#   5. 引导你从 Chrome 导出 TikTok cookies 到 /tmp/tiktok-cookies.txt
+#   5. 引导你从 Chrome 导出 TikTok cookies 到 ~/.config/ops-skills/tiktok-cookies.txt（0600）
 #
 # 跑完后你就能用 Claude 跑「跑一次 TK 模板」/「跑一次热点」等口令。
 
@@ -189,28 +189,32 @@ echo "  5. 回到这里按回车继续"
 echo ""
 read -p "登录完了按回车继续（Ctrl+C 退出）..."
 
-step "导出 cookies 到 /tmp/tiktok-cookies.txt..."
+COOKIES_PATH="$HOME/.config/ops-skills/tiktok-cookies.txt"
+mkdir -p "$HOME/.config/ops-skills"
+step "导出 cookies 到 $COOKIES_PATH..."
 # --playlist-items 0 让 yt-dlp 只跑到取 cookies 那一步，
 # 不去爬 @tiktok 用户主页的所有视频（不加这个 flag 会卡 5+ 分钟）。
+# 导到 ~/.config（持久，跨重启不被 /tmp 清）而非 /tmp，避免 cron 内 cookies 丢失。
 yt-dlp --cookies-from-browser chrome \
-       --cookies /tmp/tiktok-cookies.txt \
+       --cookies "$COOKIES_PATH" \
        --skip-download \
        --no-warnings \
        --quiet \
        --playlist-items 0 \
        'https://www.tiktok.com/@tiktok' 2>&1 | tail -3 || true
 
-if [ ! -f /tmp/tiktok-cookies.txt ]; then
+if [ ! -f "$COOKIES_PATH" ]; then
   err "Cookies 文件没生成。检查 Chrome 是否真登录了 tiktok.com。"
   exit 2
 fi
+chmod 600 "$COOKIES_PATH"  # 含登录 sessionid，收紧权限防同机其他用户读取
 
-COOKIE_COUNT=$(wc -l < /tmp/tiktok-cookies.txt)
-if grep -qE '^\.tiktok\.com\s+.*\s+sessionid\s' /tmp/tiktok-cookies.txt 2>/dev/null \
-   || grep -qE '^\.www\.tiktok\.com\s+.*\s+sessionid\s' /tmp/tiktok-cookies.txt 2>/dev/null \
-   || awk -F'\t' '$1 ~ /tiktok\.com/ && $6 == "sessionid"' /tmp/tiktok-cookies.txt | grep -q .; then
+COOKIE_COUNT=$(wc -l < "$COOKIES_PATH")
+if grep -qE '^\.tiktok\.com\s+.*\s+sessionid\s' "$COOKIES_PATH" 2>/dev/null \
+   || grep -qE '^\.www\.tiktok\.com\s+.*\s+sessionid\s' "$COOKIES_PATH" 2>/dev/null \
+   || awk -F'\t' '$1 ~ /tiktok\.com/ && $6 == "sessionid"' "$COOKIES_PATH" | grep -q .; then
   ok "Cookies 导出成功，包含 tiktok.com sessionid（真登录）"
-  ok "Cookies 文件：/tmp/tiktok-cookies.txt（$COOKIE_COUNT 行）"
+  ok "Cookies 文件：$COOKIES_PATH（$COOKIE_COUNT 行，已设 0600）"
 else
   warn "Cookies 导出了但**没找到 tiktok.com sessionid**。"
   warn "你的 Chrome 可能只是浏览过 TikTok，没有真登录。"
@@ -218,7 +222,7 @@ else
   warn "排查："
   warn "  1. 在 Chrome 打开 https://www.tiktok.com 确认头像在右上角（= 登录态）"
   warn "  2. 如果没登录态：在 Chrome 里完成登录"
-  warn "  3. 跑：rm /tmp/tiktok-cookies.txt && bash setup.sh 重试"
+  warn "  3. 跑：rm ~/.config/ops-skills/tiktok-cookies.txt && bash setup.sh 重试"
   exit 3
 fi
 
@@ -244,5 +248,5 @@ echo "      --keywords skills/tk-template-scout/tk_keywords.yaml \\"
 echo "      | python3 skills/tk-template-scout/render_briefing.py"
 echo ""
 echo "Cookies 过期了（一般 7-30 天）→ 在 Chrome 重新登录 TikTok，然后："
-echo "    rm /tmp/tiktok-cookies.txt && bash setup.sh"
+echo "    rm ~/.config/ops-skills/tiktok-cookies.txt && bash setup.sh"
 echo ""

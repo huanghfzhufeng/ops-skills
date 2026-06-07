@@ -46,6 +46,10 @@ def load_config() -> dict:
     if not CONFIG_FILE.exists():
         print(json.dumps({"error": f"配置不存在: {CONFIG_FILE}"}, ensure_ascii=False))
         sys.exit(1)
+    try:
+        CONFIG_FILE.chmod(0o600)  # 含密码/app_secret，收紧权限防同机其他用户读取
+    except OSError:
+        pass
     text = CONFIG_FILE.read_text(encoding="utf-8")
 
     def g(key: str, default: str | None = None) -> str | None:
