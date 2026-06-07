@@ -417,6 +417,8 @@ def serve_site_foreground(site_dir: Path, port: int) -> None:
     """前台模式：切换 cwd 到 site_dir，起 HTTP 服务，阻塞直到 Ctrl+C。"""
     os.chdir(site_dir)
     handler = http.server.SimpleHTTPRequestHandler
+    print("注意：分享站绑定 0.0.0.0，对同一局域网内所有设备开放且无鉴权——"
+          "仅在可信 WiFi 下使用，用完按 Ctrl+C 停止。", file=sys.stderr)
 
     try:
         webbrowser.open(f"http://localhost:{port}")
@@ -668,7 +670,8 @@ def render_site_files(
 ) -> None:
     """生成二维码 PNG + HTML 文件 + CSS。fail-fast：写完立刻校验。"""
     # 二维码
-    print(f"🔲 生成 {len(by_character)} 个二维码 (URL: http://{lan_ip}:{port}/<人物>.html)...")
+    print(f"生成 {len(by_character)} 个二维码 (URL: http://{lan_ip}:{port}/<人物>.html)...")
+    print("  注意：该地址对同一局域网所有设备开放、无鉴权，仅在可信 WiFi 下分享。", file=sys.stderr)
     for cid in by_character:
         url = f"http://{lan_ip}:{port}/{cid}.html"
         img = qrcode.make(url)
