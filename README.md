@@ -1,5 +1,7 @@
 # ops-skills
 
+> **本项目已迁移到公司库 [bitcomputing/viral-video-engine-ops](https://github.com/bitcomputing/viral-video-engine-ops)**，请到那里查看与协作最新版本。
+
 [![CI](https://github.com/huanghfzhufeng/ops-skills/actions/workflows/ci.yml/badge.svg)](https://github.com/huanghfzhufeng/ops-skills/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
