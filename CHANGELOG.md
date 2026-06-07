@@ -4,6 +4,26 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [5.5.0] - 2026-06-08
+
+### Added - analyzer-watch：自家号爆款视频实时预警（第 5 个 skill）
+
+**为什么加** — 朱锋 / owen 需求：自建 TikTok Analyzer 后台追踪 28 个数字角色账号的视频指标，希望「播放破 500 或 ER 破 5%」的爆款视频实时推飞书群，运营不用盯后台。
+
+**做法** — JWT 登录拉 /api/metrics/trending 全量视频（避开 daily 时区差 + 慢热视频漏抓），video_id 集合 diff 增量去重，首次建 baseline 不推历史。带视频封面的小卡片：个人飞书自建应用加不了群，走「app 上传图 + webhook 发」，封面 URL 用 TikTok oEmbed 实时取（避开 analyzer 存的签名过期），整卡点击跳转；封面链路任一步失败自动降级纯文字卡，推送不中断。ER 命中可配最低播放门槛 er_min_views 去噪（默认 300，观察期设 0）。
+
+**自动化** — /schedule 每 10 分钟轮询，破阈值即推，单次上限 15 条防爆量。
+
+### Changed - us-trend-scout v5.4：转文化趋势优先
+
+**为什么** — cici 需求：砍硬社会新闻（AI 监管 / 政治 / 财经），优先影视娱乐 / meme / 时尚美妆 / 生活方式情绪 / 名人文化。
+
+**做法** — Step 4 加文化趋势第一道筛 + Step 5 排序优先文化趋势；render_briefing 0 命中的 persona 整段跳过（运营只看有 24h 货的）。
+
+### Security - 凭证文件权限收紧
+
+敏感配置（含明文密码 / app_secret / sessionid）统一 chmod 0600 防同机其他用户读取；setup.sh 把 cookies 导到 ~/.config 持久目录（防 /tmp 被清）并设 0600。
+
 ## [5.3.0] - 2026-06-02
 
 ### Added - sge-blog-watcher：监听 SGE 博客，新文章自动推飞书群

@@ -83,6 +83,6 @@ jobs:
           python-version: '3.11'
           cache: pip
       - run: pip install -r requirements-dev.txt
-      - run: python3 -m py_compile skills/xcmo-mobile/mobile.py skills/tk-template-scout/scout.py skills/tk-template-scout/scout_strict.py skills/tk-template-scout/render_briefing.py skills/tk-template-scout/grab_viral_challenges.py skills/tk-template-scout/validate_translated.py
+      - run: python3 -m py_compile $(find skills -name '*.py' -not -path '*/__pycache__/*')  # 所有 skill 脚本，加新 skill 自动覆盖
       - run: bash -n setup.sh  # 验证 setup.sh 语法
       - run: pytest -v -m unit

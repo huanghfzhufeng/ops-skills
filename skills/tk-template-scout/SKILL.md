@@ -34,7 +34,8 @@ python3 -m patchright install chromium
 ```bash
 mkdir -p ~/.config/ops-skills
 cat > ~/.config/ops-skills/tk-template-scout.yaml <<'EOF'
-feishu_webhook_url: "https://open.feishu.cn/open-apis/bot/v2/hook/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+feishu_webhook_trend: "https://open.feishu.cn/open-apis/bot/v2/hook/xxxxxxxx"      # us-trend-scout 推热点群
+feishu_webhook_template: "https://open.feishu.cn/open-apis/bot/v2/hook/xxxxxxxx"   # tk-template-scout 推模板群（本 skill 实际读这个）
 EOF
 ```
 
