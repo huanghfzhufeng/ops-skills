@@ -58,7 +58,7 @@ def load_config() -> dict:
             q = val[0]
             end = val.find(q, 1)
             return val[1:end] if end > 0 else val[1:]
-        return re.split(r"\s+#", val, 1)[0].strip()  # 无引号：剥掉行内 # 注释
+        return re.split(r"\s+#", val, maxsplit=1)[0].strip()  # 无引号：剥掉行内 # 注释
 
     cfg = {
         "base_url": (g("base_url") or "").rstrip("/"),
@@ -194,8 +194,9 @@ def rel_time(created_str: str | None) -> str:
     return f"发布{hours}小时前" if hours >= 1 else "刚发布"
 
 
-def push_card(webhook: str, v: dict, views: int, er: float, reasons: list[str]) -> bool:
-    """紧凑卡片。第一行：播放(+24h增长) ｜ ER ｜ 发布多久前；底部灰字：互动(只显非0)+命中+链接。"""
+def push_card(webhook: str, v: dict, views: int, er: float) -> bool:
+    """精简卡片（观察期版）：标题=账号；第一行=播放(+24h增长) ｜ ER ｜ 发布多久前；
+    第二行灰字=互动(只显非0) + 看视频链接。按需求去掉了命中原因和文案。"""
     m = v.get("latest_metrics") or {}
     views_part = f"**播放 {views:,}**"
     g24 = v.get("growth_24h")
@@ -208,11 +209,9 @@ def push_card(webhook: str, v: dict, views: int, er: float, reasons: list[str]) 
     parts = [f"{label} {m.get(k, 0)}" for k, label in
              (("likes", "赞"), ("comments", "评"), ("shares", "转"), ("collects", "藏")) if m.get(k)]
     engage = " · ".join(parts) if parts else "暂无互动"
-    desc = (v.get("description") or "").strip()
     content = (
         f"{line1}\n"
-        f"{desc[:90]}\n"
-        f"<font color='grey'>{engage} · 命中{'、'.join(reasons)}　[看视频]({v['url']})</font>"
+        f"<font color='grey'>{engage}　[看视频]({v['url']})</font>"
     )
     card = {
         "msg_type": "interactive",
@@ -280,7 +279,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     pushed, logs = [], []
     now = datetime.datetime.now().astimezone().replace(microsecond=0).isoformat()
     for v, vw, er, r in batch:
-        if push_card(cfg["webhook"], v, vw, er, r):
+        if push_card(cfg["webhook"], v, vw, er):
             pushed.append(v["tiktok_video_id"])
             logs.append({"pushed_at": now, "handle": handle_of(v), "views": vw,
                          "er": er, "reasons": r, "url": v["url"]})

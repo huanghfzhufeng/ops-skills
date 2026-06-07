@@ -1,6 +1,6 @@
 ---
 name: analyzer-watch
-description: 监听 TikTok Analyzer（自建账号数据后台）的爆款视频，「播放破 500」或「ER 破 5% 且播放≥300」的视频立刻推送到飞书群（账号 + 播放/24h增长 + ER + 发布多久 + 命中原因 + 文案 + 互动 + 链接，一条一卡）。JWT 登录拉 /api/metrics/trending 全量视频，video_id 集合 diff 做增量去重，首次跑建 baseline 不推历史。触发：用户说「爆款预警」「analyzer 推送」「analyzer-watch」「跑一次爆款监控」「破 500 推送」，或被 /schedule 高频定时触发（默认每 10 分钟，破阈值即推）。
+description: 监听 TikTok Analyzer（自建账号数据后台）的爆款视频，「播放破 500」或「ER 破 5%」的视频立刻推送到飞书群（账号 + 播放/24h增长 + ER + 发布多久 + 互动 + 链接，一条一卡；ER 可配最低播放门槛去噪）。JWT 登录拉 /api/metrics/trending 全量视频，video_id 集合 diff 做增量去重，首次跑建 baseline 不推历史。触发：用户说「爆款预警」「analyzer 推送」「analyzer-watch」「跑一次爆款监控」「破 500 推送」，或被 /schedule 高频定时触发（默认每 10 分钟，破阈值即推）。
 ---
 
 # Analyzer Watch
@@ -13,11 +13,12 @@ description: 监听 TikTok Analyzer（自建账号数据后台）的爆款视频
 ## 命中逻辑
 
 ```
-播放 > 500   或   ( ER > 5%  且  播放 ≥ 300 )
+播放 > 500   或   ( ER > 5%  且  播放 ≥ er_min_views )
 ```
 
-- `播放≥300` 这道门砍掉「低播放 ER 虚高」的噪音：播放几十、ER 却两位数的视频不是爆款，
-  只是分母太小（实测每轮砍掉约 69 条）。真爆款分母大、ER 反而低（4 万播放 ER 才 4%），靠播放阈值抓。
+- `er_min_views` = ER 命中的最低播放门槛，**可配**：
+  - 设 `300`：砍掉「低播放 ER 虚高」噪音（播放几十、ER 却冲到两位数，分母太小不算爆款）。
+  - 设 `0`：关掉门槛 = 纯 `播放>500 或 ER>5%`（**当前观察期用这个**，先看不加门槛的推送情况，再决定要不要加回）。
 - 三个阈值都可配：`view_threshold` / `er_threshold` / `er_min_views`。
 
 ## 核心机制（对称 sge-blog-watcher）
