@@ -1,25 +1,20 @@
 #!/usr/bin/env python3
 """watch.py - 监听 TikTok Analyzer，把破阈值的爆款视频推送到飞书群。
 
-仅标准库（urllib + json + re + datetime），无需 pip install。
+仅标准库（urllib + json + re + datetime + io），无需 pip install。
 
 命令：
     run         登录 → 拉全量视频 → 筛(播放>阈值 或 (ER>阈值 且 播放>=最低播放))
-                → diff seen → 逐条推飞书卡片 → commit。
-                首次跑(无 seen)= baseline：把现有达标视频全记 seen 但不推。
+                → diff seen → 逐条推飞书卡片 → commit。首次跑= baseline，只记不推。
     run --dry-run   只 diff 不推。
     log         查推送历史。
 
 命中逻辑：播放 > view_threshold  或  ( ER > er_threshold% 且 播放 >= er_min_views )
-    └ er_min_views(默认 300) 砍掉「低播放 ER 虚高」的噪音：播放几十、ER 却虚高到
-      两位数的视频不是爆款，只是分母太小。真爆款分母大、ER 反而低，靠播放阈值抓。
 
-健壮性（已考虑的边界）：
-    - 拉取全失败 → 跳过本轮，不建空 baseline、不推（下轮重试）。
-    - 数据源全量(trending?limit=FETCH_LIMIT)，慢热老视频也不漏；触达上限主动告警，绝不静默截断。
-    - 单次推送上限 MAX_PUSH，超量按播放排序推前 N + 标注剩余。
-    - config 必填校验；登录无 token 报错；字段 null 当 0。
-    - 单条推送失败不 commit，下轮重试；seen 原子写。
+卡片封面图（可选，配了 feishu_app_id/secret 才启用）：
+    个人飞书自建应用加不了群，所以走「app 只上传图、发送仍用 webhook」——webhook 认 app
+    上传的 image_key。封面 URL 用 TikTok oEmbed 实时取（analyzer 存的带签名、会过期）。
+    访问 TikTok 要走 proxy。整条封面链路任一步失败 → 自动降级纯文字卡，推送绝不中断。
 
 配置：~/.config/ops-skills/analyzer-watch.yaml
 state：~/.config/ops-skills/analyzer-watch-seen.json（跨 plugin 升级保留）
@@ -28,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import io
 import json
 import re
 import sys
@@ -39,8 +35,11 @@ STATE_DIR = Path.home() / ".config" / "ops-skills"
 CONFIG_FILE = STATE_DIR / "analyzer-watch.yaml"
 SEEN_FILE = STATE_DIR / "analyzer-watch-seen.json"
 PUSHLOG_FILE = STATE_DIR / "analyzer-watch-pushlog.jsonl"
-MAX_PUSH = 15       # 单次推送上限，防异常爆量刷屏 + 飞书限流
-FETCH_LIMIT = 50000  # 拉全量视频的 limit；设远大于总视频数（当前约 1300），逼近时会告警
+MAX_PUSH = 15        # 单次推送上限，防异常爆量刷屏 + 飞书限流
+FETCH_LIMIT = 50000  # 拉全量视频的 limit；设远大于总视频数，逼近时告警
+FEISHU = "https://open.feishu.cn/open-apis"
+UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+      "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
 
 def load_config() -> dict:
@@ -67,7 +66,10 @@ def load_config() -> dict:
         "webhook": g("feishu_webhook"),
         "view_th": float(g("view_threshold", "500")),
         "er_th": float(g("er_threshold", "5")),
-        "er_min_views": float(g("er_min_views", "300")),  # ER 命中的最低播放门槛，砍噪音
+        "er_min_views": float(g("er_min_views", "300")),
+        "app_id": g("feishu_app_id"),        # 可选：封面图用
+        "app_secret": g("feishu_app_secret"),
+        "proxy": g("proxy"),                  # 可选：访问 TikTok 用
     }
     missing = [k for k in ("base_url", "email", "password", "webhook") if not cfg[k]]
     if missing:
@@ -100,12 +102,8 @@ def login(cfg: dict) -> str:
 
 
 def fetch_candidates(cfg: dict, token: str) -> tuple[list[dict], int]:
-    """拉【全量】追踪视频（trending?limit 设大 = 所有视频按热度排，不只 top）。
-
-    全量才不漏「慢热」视频——10 多天前发、最近才慢慢爬过阈值的，既不在当天 daily、
-    也挤不进热门 top。构造精简候选 dict（只留下游要的字段，含发布时间 created_at 和
-    过去 24h 播放增长 growth_24h）。返回 (videos, ok)；ok=0 表示拉取失败。
-    """
+    """拉【全量】追踪视频（trending?limit 大 = 所有视频按热度排）。全量才不漏慢热视频。
+    返回 (videos, ok)；ok=0 表示拉取失败（→ 上层跳过本轮，不建空 baseline）。"""
     try:
         data = http_json(f"{cfg['base_url']}/api/metrics/trending?limit={FETCH_LIMIT}",
                          token=token, timeout=40)
@@ -121,10 +119,9 @@ def fetch_candidates(cfg: dict, token: str) -> tuple[list[dict], int]:
             "tiktok_video_id": vid,
             "url": v.get("url", ""),
             "description": v.get("description") or "",
-            "created_at": v.get("created_at"),                  # 发布时间(UTC ISO)
+            "created_at": v.get("created_at"),
             "latest_metrics": v.get("latest_metrics") or {},
             "engagement_rate": v.get("engagement_rate") or 0,
-            "growth_24h": item.get("views_growth_24h"),         # 过去 24h 播放增长(在外层 item)
         })
     return videos, 1
 
@@ -138,7 +135,7 @@ def find_hits(videos: list[dict], cfg: dict) -> list[tuple]:
         reasons = []
         if views > cfg["view_th"]:
             reasons.append(f"播放破{int(cfg['view_th'])}")
-        if er > cfg["er_th"] and views >= cfg["er_min_views"]:  # ER 命中要求播放达门槛，砍噪音
+        if er > cfg["er_th"] and views >= cfg["er_min_views"]:
             reasons.append(f"ER破{cfg['er_th']:g}%")
         if reasons:
             out.append((v, views, er, reasons))
@@ -178,7 +175,7 @@ def handle_of(v: dict) -> str:
 
 
 def rel_time(created_str: str | None) -> str:
-    """把发布时间(UTC ISO)算成相对时间，让运营一眼分「新视频起飞」还是「老视频慢热」。"""
+    """发布时间(UTC ISO) → 相对时间，让运营一眼分新爆/慢热。"""
     if not created_str:
         return ""
     try:
@@ -194,36 +191,96 @@ def rel_time(created_str: str | None) -> str:
     return f"发布{hours}小时前" if hours >= 1 else "刚发布"
 
 
-def push_card(webhook: str, v: dict, views: int, er: float) -> bool:
-    """精简卡片（观察期版）：标题=账号；第一行=播放(+24h增长) ｜ ER ｜ 发布多久前；
-    第二行灰字=互动(只显非0) + 看视频链接。按需求去掉了命中原因和文案。"""
+# ---------- 封面图（可选；任一步失败 → 返回 None，push_card 自动降级纯文字卡）----------
+
+def _open_proxy(req: urllib.request.Request, proxy: str | None, timeout: int):
+    """用指定代理打开请求；proxy=None 显式直连（不读环境变量，定时任务环境更可控）。"""
+    handler = urllib.request.ProxyHandler({"http": proxy, "https": proxy} if proxy else {})
+    return urllib.request.build_opener(handler).open(req, timeout=timeout)
+
+
+def get_tenant_token(cfg: dict) -> str | None:
+    """app 凭证换 tenant_access_token。没配 app 凭证或失败 → None（降级纯文字卡）。"""
+    if not cfg.get("app_id") or not cfg.get("app_secret"):
+        return None
+    try:
+        r = http_json(f"{FEISHU}/auth/v3/tenant_access_token/internal", "POST",
+                      payload={"app_id": cfg["app_id"], "app_secret": cfg["app_secret"]})
+        return r.get("tenant_access_token")
+    except (urllib.error.URLError, TimeoutError):
+        return None
+
+
+def upload_feishu_image(app_token: str, img: bytes) -> str | None:
+    """上传图片到飞书拿 image_key（飞书直连）。失败 → None。"""
+    bd = "----wbBoundary7391x"
+    body = b"".join([
+        f"--{bd}\r\n".encode(),
+        b'Content-Disposition: form-data; name="image_type"\r\n\r\nmessage\r\n',
+        f"--{bd}\r\n".encode(),
+        b'Content-Disposition: form-data; name="image"; filename="c.jpg"\r\n',
+        b"Content-Type: image/jpeg\r\n\r\n", img, f"\r\n--{bd}--\r\n".encode(),
+    ])
+    req = urllib.request.Request(f"{FEISHU}/im/v1/images", data=body, method="POST",
+        headers={"Authorization": f"Bearer {app_token}",
+                 "Content-Type": f"multipart/form-data; boundary={bd}"})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            return json.loads(r.read().decode()).get("data", {}).get("image_key")
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+        return None
+
+
+def fetch_cover_image_key(cfg: dict, video_url: str, app_token: str | None) -> str | None:
+    """oEmbed 实时取封面 → 下载 → 上传飞书 → image_key。任一步失败 → None（降级）。"""
+    if not app_token or not video_url:
+        return None
+    proxy = cfg.get("proxy")
+    try:
+        oreq = urllib.request.Request(f"https://www.tiktok.com/oembed?url={video_url}",
+                                      headers={"User-Agent": UA})
+        thumb = json.loads(_open_proxy(oreq, proxy, 15).read().decode()).get("thumbnail_url")
+        if not thumb:
+            return None
+        img = _open_proxy(urllib.request.Request(thumb, headers={"User-Agent": UA}), proxy, 20).read()
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, ValueError):
+        return None
+    return upload_feishu_image(app_token, img)
+
+
+def push_card(cfg: dict, v: dict, views: int, er: float, app_token: str | None) -> bool:
+    """有封面 → 左图右文小卡片；拿不到封面 → 降级纯文字卡。整卡点击跳转视频。"""
     m = v.get("latest_metrics") or {}
-    views_part = f"**播放 {views:,}**"
-    g24 = v.get("growth_24h")
-    if g24 is not None:                       # 24h 增长：区分「正在爆」(涨很多) vs「已爆完」(0)
-        views_part += f" · 24h{g24:+,}"
-    line1 = f"{views_part} ｜ **ER {er}%**"
     rel = rel_time(v.get("created_at"))
-    if rel:
-        line1 += f" ｜ {rel}"
     parts = [f"{label} {m.get(k, 0)}" for k, label in
              (("likes", "赞"), ("comments", "评"), ("shares", "转"), ("collects", "藏")) if m.get(k)]
     engage = " · ".join(parts) if parts else "暂无互动"
-    content = (
-        f"{line1}\n"
-        f"<font color='grey'>{engage}　[看视频]({v['url']})</font>"
-    )
-    card = {
-        "msg_type": "interactive",
-        "card": {
-            "config": {"wide_screen_mode": True},
-            "header": {"title": {"tag": "plain_text", "content": f"爆款预警 · @{handle_of(v)}"},
-                       "template": "red"},
-            "elements": [{"tag": "div", "text": {"tag": "lark_md", "content": content}}],
-        },
-    }
+    url = v.get("url", "")
+
+    image_key = fetch_cover_image_key(cfg, url, app_token)
+    if image_key:
+        txt = (f"**播放 {views:,}** ｜ **ER {er}%**\n{rel}\n"
+               f"<font color='grey'>{engage}　看视频</font>")
+        elements = [{"tag": "column_set", "flex_mode": "none", "horizontal_spacing": "default", "columns": [
+            {"tag": "column", "width": "weighted", "weight": 1, "vertical_align": "center",
+             "elements": [{"tag": "img", "img_key": image_key,
+                           "alt": {"tag": "plain_text", "content": ""}, "mode": "fit_horizontal"}]},
+            {"tag": "column", "width": "weighted", "weight": 3, "vertical_align": "center",
+             "elements": [{"tag": "div", "text": {"tag": "lark_md", "content": txt}}]},
+        ]}]
+    else:
+        line1 = f"**播放 {views:,}** ｜ **ER {er}%**" + (f" ｜ {rel}" if rel else "")
+        elements = [{"tag": "div", "text": {"tag": "lark_md",
+                     "content": f"{line1}\n<font color='grey'>{engage}　[看视频]({url})</font>"}}]
+
+    card = {"msg_type": "interactive", "card": {
+        "config": {"wide_screen_mode": True},
+        "card_link": {"url": url},
+        "header": {"title": {"tag": "plain_text", "content": f"爆款预警 · @{handle_of(v)}"}, "template": "red"},
+        "elements": elements,
+    }}
     try:
-        r = http_json(webhook, "POST", payload=card)
+        r = http_json(cfg["webhook"], "POST", payload=card)
         return r.get("code") == 0 or r.get("StatusCode") == 0
     except (urllib.error.URLError, TimeoutError):
         return False
@@ -238,11 +295,10 @@ def cmd_run(args: argparse.Namespace) -> int:
         return 1
 
     videos, ok_sources = fetch_candidates(cfg, token)
-    if ok_sources == 0:  # 数据源挂了 → 不建 baseline 不推，下轮重试
-        print(json.dumps({"error": "数据源抓取失败，跳过本轮（不建 baseline、不推）"},
-                         ensure_ascii=False))
+    if ok_sources == 0:
+        print(json.dumps({"error": "数据源抓取失败，跳过本轮（不建 baseline、不推）"}, ensure_ascii=False))
         return 1
-    truncated_fetch = len(videos) >= FETCH_LIMIT  # 触达上限 = 可能被截断，必须告警别静默漏
+    truncated_fetch = len(videos) >= FETCH_LIMIT
 
     hit_list = find_hits(videos, cfg)
     seen = load_seen()
@@ -253,7 +309,7 @@ def cmd_run(args: argparse.Namespace) -> int:
             out["warn"] = f"视频数触达上限 {FETCH_LIMIT}，可能被截断，请调大 FETCH_LIMIT"
         return out
 
-    if seen is None:  # baseline：首次记 seen 不推
+    if seen is None:
         save_seen(current_ids)
         print(json.dumps(stamp({"mode": "baseline", "total_hits": len(hit_list), "pushed": 0}),
                          ensure_ascii=False))
@@ -263,8 +319,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     if args.dry_run:
         print(json.dumps({"mode": "dry-run", "new": len(new), "videos": [
-            {"handle": handle_of(v), "reasons": r, "views": vw, "er": er,
-             "created_at": v.get("created_at"), "growth_24h": v.get("growth_24h"), "url": v["url"]}
+            {"handle": handle_of(v), "reasons": r, "views": vw, "er": er, "url": v["url"]}
             for v, vw, er, r in new]}, ensure_ascii=False, indent=2))
         return 0
 
@@ -272,21 +327,22 @@ def cmd_run(args: argparse.Namespace) -> int:
         print(json.dumps(stamp({"mode": "incremental", "new": 0, "pushed": 0}), ensure_ascii=False))
         return 0
 
-    # 单次上限：防异常爆量。超量按播放高的优先，剩余下轮继续。
     truncated = len(new) > MAX_PUSH
     batch = sorted(new, key=lambda x: -x[1])[:MAX_PUSH]
+    app_token = get_tenant_token(cfg)  # 封面用；None 则全部降级纯文字卡
 
     pushed, logs = [], []
     now = datetime.datetime.now().astimezone().replace(microsecond=0).isoformat()
     for v, vw, er, r in batch:
-        if push_card(cfg["webhook"], v, vw, er):
+        if push_card(cfg, v, vw, er, app_token):
             pushed.append(v["tiktok_video_id"])
             logs.append({"pushed_at": now, "handle": handle_of(v), "views": vw,
                          "er": er, "reasons": r, "url": v["url"]})
-    save_seen(seen | set(pushed))  # 只 commit 推成功的，失败的下轮重试
+    save_seen(seen | set(pushed))
     append_pushlog(logs)
 
-    out = stamp({"mode": "incremental", "new": len(new), "pushed": len(pushed)})
+    out = stamp({"mode": "incremental", "new": len(new), "pushed": len(pushed),
+                 "cover": "on" if app_token else "off"})
     if truncated:
         out["note"] = f"本轮 {len(new)} 条超上限，按播放推了前 {MAX_PUSH} 条，剩余下轮继续"
     print(json.dumps(out, ensure_ascii=False))
