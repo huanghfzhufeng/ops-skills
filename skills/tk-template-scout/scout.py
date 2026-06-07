@@ -69,7 +69,8 @@ def fetch_metadata(url: str, browser: str = "chrome", timeout: int = 30) -> dict
             "webpage_url": data.get("webpage_url") or url,
             "thumbnail": data.get("thumbnail"),
         }
-    except (subprocess.TimeoutExpired, json.JSONDecodeError, Exception):
+    except (subprocess.TimeoutExpired, json.JSONDecodeError, OSError):
+        # 收窄：原来混入裸 Exception 把代码 bug 也静默吞了；只吞预期的超时/解析/进程异常
         return None
 
 

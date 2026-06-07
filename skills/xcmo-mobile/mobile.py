@@ -271,17 +271,23 @@ def download_file(url: str, dest: Path, session: dict) -> bool:
     )
     for attempt in range(2):
         try:
-            with urllib.request.urlopen(req, timeout=180) as resp:
-                dest.write_bytes(resp.read())
+            with urllib.request.urlopen(req, timeout=180) as resp, dest.open("wb") as f:
+                while True:  # 流式分块写，避免大视频整个读进内存 OOM
+                    chunk = resp.read(1 << 16)
+                    if not chunk:
+                        break
+                    f.write(chunk)
             return True
         except urllib.error.HTTPError as e:
+            dest.unlink(missing_ok=True)  # 清半截文件，否则 download_all 的 .exists() 跳过 → 永不重下
             if e.code in (401, 403):
                 raise AuthExpiredError(f"HTTP {e.code} 下载时 token 失效")
             if attempt == 1:
-                print(f"    ❌ 下载失败 {full_url}: {e}", file=sys.stderr)
+                print(f"    下载失败 {full_url}: {e}", file=sys.stderr)
         except (urllib.error.URLError, OSError, TimeoutError) as e:
+            dest.unlink(missing_ok=True)  # 同上：清半截坏档
             if attempt == 1:
-                print(f"    ❌ 下载失败 {full_url}: {e}", file=sys.stderr)
+                print(f"    下载失败 {full_url}: {e}", file=sys.stderr)
     return False
 
 
