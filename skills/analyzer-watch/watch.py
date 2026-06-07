@@ -260,7 +260,7 @@ def push_card(cfg: dict, v: dict, views: int, er: float, app_token: str | None) 
     image_key = fetch_cover_image_key(cfg, url, app_token)
     if image_key:
         txt = (f"**播放 {views:,}** ｜ **ER {er}%**\n{rel}\n"
-               f"<font color='grey'>{engage}　看视频</font>")
+               f"<font color='grey'>{engage}</font>　[看视频]({url})")
         elements = [{"tag": "column_set", "flex_mode": "none", "horizontal_spacing": "default", "columns": [
             {"tag": "column", "width": "weighted", "weight": 1, "vertical_align": "center",
              "elements": [{"tag": "img", "img_key": image_key,
