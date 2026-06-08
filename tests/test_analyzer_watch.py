@@ -17,43 +17,62 @@ _spec.loader.exec_module(watch)
 pytestmark = pytest.mark.unit
 
 
-def _cfg(view_th=500, er_th=5, er_min=0):
-    return {"view_th": float(view_th), "er_th": float(er_th), "er_min_views": float(er_min)}
+def _cfg(view_th=1000, er_th=5, er_min=500, er_max_age=7):
+    return {"view_th": float(view_th), "er_th": float(er_th),
+            "er_min_views": float(er_min), "er_max_age_days": float(er_max_age)}
 
 
-def _vid(views, er, vid="1"):
+def _vid(views, er, vid="1", age_days=0):
+    created = (datetime.datetime.now(datetime.timezone.utc)
+               - datetime.timedelta(days=age_days, hours=1)).strftime("%Y-%m-%dT%H:%M:%S")
     return {"tiktok_video_id": vid, "url": "https://www.tiktok.com/@x/video/1",
-            "latest_metrics": {"views": views}, "engagement_rate": er}
+            "latest_metrics": {"views": views}, "engagement_rate": er, "created_at": created}
 
 
 class TestFindHits:
-    def test_view_hit(self) -> None:
-        hits = watch.find_hits([_vid(600, 1)], _cfg())
-        assert len(hits) == 1 and "播放破500" in hits[0][3]
+    """周会版：播放>1000  或  (ER>5% 且 播放>500 且 发布≤7天)。"""
 
-    def test_er_hit_no_floor(self) -> None:
-        # er_min_views=0：纯 ER>5 命中，低播放也算（owen 观察期行为）
-        hits = watch.find_hits([_vid(39, 12)], _cfg(er_min=0))
+    def test_flow_hit_over_1000(self) -> None:
+        # 纯流量：播放>1000 命中，不管 ER/发布多久
+        hits = watch.find_hits([_vid(1500, 0.5, age_days=100)], _cfg())
+        assert len(hits) == 1 and "播放破1000" in hits[0][3]
+
+    def test_flow_not_hit_under_1000(self) -> None:
+        # 播放<1000 且 ER 不达标 → 不命中
+        assert watch.find_hits([_vid(800, 1)], _cfg()) == []
+
+    def test_er_new_video_hit(self) -> None:
+        # ER>5 且 播放>500 且 7天内 → 命中
+        hits = watch.find_hits([_vid(600, 8, age_days=2)], _cfg())
         assert len(hits) == 1 and any("ER破" in r for r in hits[0][3])
 
-    def test_er_floor_blocks_low_views(self) -> None:
-        # er_min_views=300：播放 39 / ER 12 不命中（低于门槛，砍噪音）
-        assert watch.find_hits([_vid(39, 12)], _cfg(er_min=300)) == []
+    def test_er_blocked_low_views(self) -> None:
+        # ER>5 但播放<500 → 不命中（砍低播放噪音）
+        assert watch.find_hits([_vid(400, 12, age_days=1)], _cfg()) == []
 
-    def test_er_floor_allows_high_views(self) -> None:
-        hits = watch.find_hits([_vid(400, 12)], _cfg(er_min=300))
-        assert len(hits) == 1
-
-    def test_no_hit(self) -> None:
-        assert watch.find_hits([_vid(100, 2)], _cfg(er_min=300)) == []
+    def test_er_blocked_old_video(self) -> None:
+        # ER>5 播放>500 但发布>7天 → 不命中（7天约束砍老视频慢热）
+        assert watch.find_hits([_vid(600, 12, age_days=30)], _cfg()) == []
 
     def test_both_reasons(self) -> None:
-        _, _, _, reasons = watch.find_hits([_vid(600, 8)], _cfg(er_min=300))[0]
-        assert "播放破500" in reasons and any("ER破" in r for r in reasons)
+        # 播放>1000 且 ER>5 且 7天内 → 两个命中原因
+        _, _, _, reasons = watch.find_hits([_vid(1500, 8, age_days=1)], _cfg())[0]
+        assert "播放破1000" in reasons and any("ER破" in r for r in reasons)
+
+    def test_no_hit(self) -> None:
+        assert watch.find_hits([_vid(100, 2)], _cfg()) == []
+
+    def test_created_at_missing_flow_still_hits(self) -> None:
+        # created_at 缺失：ER 那条判不了，但播放>1000 仍命中（安全兜底）
+        v = {"tiktok_video_id": "1", "url": "https://x",
+             "latest_metrics": {"views": 1500}, "engagement_rate": 12}
+        hits = watch.find_hits([v], _cfg())
+        assert len(hits) == 1 and "播放破1000" in hits[0][3]
 
     def test_null_fields_treated_as_zero(self) -> None:
-        v = {"tiktok_video_id": "1", "url": "https://x", "latest_metrics": {}, "engagement_rate": None}
-        assert watch.find_hits([v], _cfg(er_min=300)) == []
+        v = {"tiktok_video_id": "1", "url": "https://x", "latest_metrics": {},
+             "engagement_rate": None, "created_at": None}
+        assert watch.find_hits([v], _cfg()) == []
 
 
 class TestRelTime:
