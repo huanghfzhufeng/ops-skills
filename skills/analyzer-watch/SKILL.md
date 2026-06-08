@@ -10,7 +10,7 @@ description: 监听 TikTok Analyzer（自建账号数据后台）的爆款视频
 
 数据源：Analyzer 的 JSON API（JWT 登录，**不爬 HTML**）。阈值都可在配置里调。
 
-## 命中逻辑
+## 命中逻辑（当前：v1）
 
 ```
 播放 > 1000   或   ( ER > 5%  且  播放 > 500  且  发布 ≤ 7 天 )
@@ -19,6 +19,8 @@ description: 监听 TikTok Analyzer（自建账号数据后台）的爆款视频
 - **条件1 · 纯流量爆款**：播放破 1000 即推，不管 ER、不管发布多久。
 - **条件2 · 高互动新视频**：ER > 5% 且 播放 > 500 且 7 天内发布。「7 天」砍掉「老视频慢热的虚高 ER」（实测 ER 候选里约 85% 是 7 天前老视频，被这条约束砍掉）。
 - 四个阈值都可配：`view_threshold`(1000) / `er_threshold`(5) / `er_min_views`(500) / `er_max_age_days`(7)。
+
+> **版本命名约定**：命中条件每次调整按 `v1 / v2 / v3` 递增命名，**不要用「周会版」这种按来源的叫法**。改条件时同步三处：① 本节标题的版本号 ② `find_hits` docstring ③ CHANGELOG 记一笔。
 
 ## 核心机制（对称 sge-blog-watcher）
 
