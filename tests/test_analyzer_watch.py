@@ -30,7 +30,7 @@ def _vid(views, er, vid="1", age_days=0):
 
 
 class TestFindHits:
-    """周会版：播放>1000  或  (ER>5% 且 播放>500 且 发布≤7天)。"""
+    """命中逻辑 v1：播放>1000  或  (ER>5% 且 播放>500 且 发布≤7天)。"""
 
     def test_flow_hit_over_1000(self) -> None:
         # 纯流量：播放>1000 命中，不管 ER/发布多久

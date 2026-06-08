@@ -71,7 +71,7 @@ def load_config() -> dict:
         "view_th": float(g("view_threshold", "500")),
         "er_th": float(g("er_threshold", "5")),
         "er_min_views": float(g("er_min_views", "500")),       # ER 命中的最低播放
-        "er_max_age_days": float(g("er_max_age_days", "7")),   # ER 命中要求发布 ≤ N 天（周会版）
+        "er_max_age_days": float(g("er_max_age_days", "7")),   # ER 命中要求发布 ≤ N 天（v1）
         "app_id": g("feishu_app_id"),        # 可选：封面图用
         "app_secret": g("feishu_app_secret"),
         "proxy": g("proxy"),                  # 可选：访问 TikTok 用
@@ -143,7 +143,7 @@ def _age_days(created_str: str | None, now: datetime.datetime) -> float:
 
 
 def find_hits(videos: list[dict], cfg: dict) -> list[tuple]:
-    """命中逻辑（周会版）：
+    """命中逻辑（v1）：
        播放 > view_th(1000)                                              → 纯流量爆款
        或 (ER > er_th% 且 播放 > er_min_views 且 发布 ≤ er_max_age_days 天) → 高互动新视频
     """
