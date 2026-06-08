@@ -70,7 +70,8 @@ def load_config() -> dict:
         "webhook": g("feishu_webhook"),
         "view_th": float(g("view_threshold", "500")),
         "er_th": float(g("er_threshold", "5")),
-        "er_min_views": float(g("er_min_views", "300")),
+        "er_min_views": float(g("er_min_views", "500")),       # ER 命中的最低播放
+        "er_max_age_days": float(g("er_max_age_days", "7")),   # ER 命中要求发布 ≤ N 天（周会版）
         "app_id": g("feishu_app_id"),        # 可选：封面图用
         "app_secret": g("feishu_app_secret"),
         "proxy": g("proxy"),                  # 可选：访问 TikTok 用
@@ -130,17 +131,34 @@ def fetch_candidates(cfg: dict, token: str) -> tuple[list[dict], int]:
     return videos, 1
 
 
+def _age_days(created_str: str | None, now: datetime.datetime) -> float:
+    """视频发布距今天数；created_at 缺失/异常 → 999（视为很老，不满足新视频约束）。"""
+    if not created_str:
+        return 999
+    try:
+        created = datetime.datetime.fromisoformat(created_str).replace(tzinfo=datetime.timezone.utc)
+    except (ValueError, TypeError):
+        return 999
+    return (now - created).days
+
+
 def find_hits(videos: list[dict], cfg: dict) -> list[tuple]:
+    """命中逻辑（周会版）：
+       播放 > view_th(1000)                                              → 纯流量爆款
+       或 (ER > er_th% 且 播放 > er_min_views 且 发布 ≤ er_max_age_days 天) → 高互动新视频
+    """
     out = []
+    now = datetime.datetime.now(datetime.timezone.utc)
     for v in videos:
         metrics = v.get("latest_metrics") or {}
         views = metrics.get("views") or 0
         er = v.get("engagement_rate") or 0
         reasons = []
-        if views > cfg["view_th"]:
+        if views > cfg["view_th"]:                              # 纯流量爆款（不管 ER/时间）
             reasons.append(f"播放破{int(cfg['view_th'])}")
-        if er > cfg["er_th"] and views >= cfg["er_min_views"]:
-            reasons.append(f"ER破{cfg['er_th']:g}%")
+        if (er > cfg["er_th"] and views > cfg["er_min_views"]   # 高互动新视频
+                and _age_days(v.get("created_at"), now) <= cfg["er_max_age_days"]):
+            reasons.append(f"ER破{cfg['er_th']:g}%·{int(cfg['er_max_age_days'])}天新")
         if reasons:
             out.append((v, views, er, reasons))
     return out
