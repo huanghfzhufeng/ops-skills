@@ -54,21 +54,42 @@ $EDITOR ~/.config/ops-skills/personas.yaml
 
 跨 plugin 升级保留。
 
-## v4.6.0 默认流程（严格 24h + Top 1 + ≤15s + 全平台挑战）
+## v6 默认流程（严格 24h + 全平台 Top3 挑战 + 26 角色，可靠版）
 
-**用户说"跑一次 TK 模板" → 默认走这个流程**：
+**用户说"跑一次 TK 模板" → 默认走这个流程**。两块缺一不可，**质量第一、绝不空推**：
+① 【全平台热门挑战 Top 3】放最顶部，运营最看重（Claude 创意判断 + 脚本验证样本）
+② 【26 个数字角色 24h Top 模板】脚本抓取 + Claude 翻译
 
 ```
-Step 0: Claude 用 WebSearch 找全平台 Top 3 热门挑战（跨赛道 viral phenomenon）
-Step 1: 加载 yaml（personas.yaml + tk_keywords.yaml）
-Step 2: 算日期
-Step 3-5: 跳过（v4.6.0 不走 MVP 模式）
-Step 6: scout_strict.py 抓 26 人 × 24h × Top 1 × ≤15s
-Step 7: Claude 翻译 + 生成挑战和 persona 仿拍 brief
-Step 8: render_briefing.py 渲染 → 推飞书
+Step A: 后台启动 scout_strict.py 抓 26 人 × 24h（both 双源，~14 分钟）
+        —— 必须【后台跑 + 轮询】，绝不前台 wait（前台 Bash 600 秒被杀 = 漏推根因）
+Step B: 等抓取的同时，Claude WebSearch 找【补充候选】（纯格式类，scout 关键词覆盖不到的）
+        —— 只搜不抓 TikTok，别抢限流；WebSearch 只当补充，必须过 D 的验证 + 赞地板
+Step C: 轮询等 scout 完成（pgrep -f scout_strict.py + $RESULT 是否合法 JSON）
+Step D: scout 完成后 → derive_challenges.py 数据驱动出主候选（跨 persona 高频高赞 hashtag）
+        + 合并 WebSearch 补充候选 → grab_viral_challenges.py 验真样本(7 天内)
+        → 赞地板 ≥1万 闸门 → 按借鉴价值挑 Top3 + Claude 翻译 26 角色 + 写回 viral_challenges
+Step E: render_briefing.py 渲染（--min-likes 500 滤 26 角色噪声 + Top3 透明标注）→ push_feishu_card.py 推飞书
 ```
 
-**旧 MVP 模式**（WebSearch + yt-dlp 不带 24h 硬过滤）废弃但保留代码备用，不走。
+**可靠性关键（v6 就是修这个）**：14 分钟抓取**后台跑 + 轮询**，不要用前台 Bash 死等——
+前台 Bash 最多 600 秒就被杀，scout 没跑完简报就空了，这是以前定时任务漏推的根因。
+
+**Top3 来源可靠性（v6.1）**：Top3 主候选来自 **scout 真抓数据**（`derive_challenges.py` 跨 persona
+聚合高频高赞 hashtag，客观可证实，不靠 WebSearch 猜——如 #monacogp 跨 2 角色聚合 50 万赞自然冒出）；
+WebSearch 只出补充候选（纯格式类）。两路都必须过 **grab 验证 7 天内真样本 + 赞地板 ≥1万**，
+render 把每条样本赞 / 抓取时间 / 来源透明标出让运营可核。解决了「WebSearch 当源头不稳 + 猜 hashtag 漏热点」。
+
+**绝不空推 · 降级链**：
+- Top3 一条没验证到 → 留空，仍推 26 角色（render 自动跳过 Top3 块）
+- 翻译失败/来不及 → 原文标题兜底（render 的 `title_cn or title`），仍推
+- 抓取超时/失败但 Top3 有货 → 只推 Top3 + 标注「26 角色稍后补」
+- 全失败 → 推一条「抓取失败，查 cookies / 代理」报警，不静默
+
+**定时任务**：每天自动跑由 `~/.claude/scheduled-tasks/tk-template-scout-daily/SKILL.md`
+执行（v6 同款流程，自包含 runbook）。当前推测试群，用户确认质量后改一行切正式 template 群。
+
+**旧 MVP 模式 / v4.6.0 Top1 单条**：废弃，代码保留备用，默认不走。
 
 ## 选择模式（旧文档保留作历史）
 
@@ -366,18 +387,19 @@ UTC 01:00 = 北京 09:00（美东前一天晚上 8-9 点）。
    - **tier 2（relaxed，0 命中时启用）**：≤30s + 横竖不限
 7. 按 like_count 取 Top N（默认 1）
 
-**v4.6.0 单条命令**（默认 Top 1 + ≤15s 硬过滤）：
+**v6 单条命令**（默认 Top 3 + ≤15s 硬过滤；**长跑务必后台 + 轮询，别前台死等**——前台 Bash 600 秒会被杀）：
 
 ```bash
-python3 "<skill-dir>/scout_strict.py" \
+# 后台跑：末尾 & + nohup，然后轮询 result.json 变成合法 JSON 即抓完（中途为空）
+nohup python3 "<skill-dir>/scout_strict.py" \
   --keywords "$KEYWORDS" \
   --max-age-hours 24 \
-  --top-n 1 \
+  --top-n 3 \
   --source both \
   --parallel 4 \
   --yt-dlp-parallel 4 \
   --min-likes-warn 500 \
-  > result.json 2> strict.log
+  > result.json 2> strict.log &
 ```
 
 参数：

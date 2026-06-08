@@ -120,6 +120,7 @@ def format_briefing(
     data: dict[str, Any],
     personas: dict[str, dict[str, str]],
     today: datetime | None = None,
+    min_likes: int = 0,
 ) -> str:
     """
     把 scout_strict.py 的 JSON 输出渲染成简报。
@@ -159,11 +160,20 @@ def format_briefing(
                 lines.append(f"   玩法：{desc}")
             if sample_url:
                 likes_str = f" | {fmt_likes(sample_likes)}" if sample_likes else ""
-                lines.append(f"   样本：{sample_url}{likes_str}")
+                age = ch.get("sample_age_hours")
+                if age:
+                    age_str = f" | {int(age)}h前抓" if age < 48 else f" | {int(age / 24)}天前抓"
+                    age_str += " ✓7天内真样本"
+                else:
+                    age_str = ""
+                lines.append(f"   样本：{sample_url}{likes_str}{age_str}")
+            prov = (ch.get("provenance") or "").strip()
+            if prov:
+                lines.append(f"   来源：{prov}")
             if fanpai:
                 lines.append(f"   仿拍：{fanpai}")
             lines.append("")
-        lines.append("—— 以下为各赛道 Top 1 ——")
+        lines.append("—— 以下为各赛道 24h 模板 ——")
         lines.append("")
 
     # v4.8.1：tier fallback 全局说明（scout_strict.py 输出 tight/relaxed 双档）
@@ -184,6 +194,12 @@ def format_briefing(
         if not info or not info.get("videos"):
             continue  # v5.4：0 命中的 persona 整个跳过，不写占位行（运营只看有 24h 货的）
 
+        # v6.1：噪声地板——丢掉点赞 < min_likes 的视频；整个 persona 没货就跳过
+        # （解决自动跑把 mia 5 赞 / max 13 赞这种噪声推给运营的问题）
+        vids = [v for v in info["videos"] if (v.get("like_count") or 0) >= min_likes]
+        if not vids:
+            continue
+
         pdef = personas.get(pk, {})
         handle = pdef.get("handle", f"@{pk}")
         cap = capitalize_persona(pk)
@@ -193,7 +209,7 @@ def format_briefing(
         # v4.8.1：tier 标签 [15s] / [30s 兜底] 让运营一眼看出哪条是扩搜
         tier = info.get("tier_used", "tight")
         tier_tag = "[15s]" if tier == "tight" else "[30s 兜底]"
-        for v in info["videos"]:
+        for v in vids:
             title = clean_title(v.get("title_cn") or v.get("title", ""))
             likes = fmt_likes(v.get("like_count") or 0)
             url = v.get("url", "")
@@ -223,6 +239,10 @@ def main() -> None:
         "--personas", type=Path,
         help="personas.yaml 路径（默认按 ~/.config/ops-skills/ → plugin 自带顺序查找）",
     )
+    parser.add_argument(
+        "--min-likes", type=int, default=0,
+        help="26 角色板块噪声地板：丢掉点赞低于此值的视频（默认 0=不过滤；tk 定时任务用 500）",
+    )
     args = parser.parse_args()
 
     # 1. 加载 scout 数据
@@ -248,7 +268,7 @@ def main() -> None:
     personas = load_personas(personas_path)
 
     # 3. 渲染
-    print(format_briefing(data, personas), end="")
+    print(format_briefing(data, personas, min_likes=args.min_likes), end="")
 
 
 if __name__ == "__main__":

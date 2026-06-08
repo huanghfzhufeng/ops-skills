@@ -161,6 +161,35 @@ class TestFormatBriefing:
         assert "video B | 567赞 | https://www.tiktok.com/@b/video/2" in result
         assert "video C | 3.5K赞 | https://www.tiktok.com/@c/video/3" in result
 
+    def test_min_likes_floor_drops_noise(self, sample_personas, fixed_date) -> None:
+        """v6.1：--min-likes 地板丢掉低赞噪声视频；persona 全被丢就整个跳过。"""
+        data = {
+            "personas": {
+                "sophie": {  # 一条过线 + 一条 5 赞噪声
+                    "videos": [
+                        {"title": "goodone", "like_count": 9999, "url": "https://x/good"},
+                        {"title": "noisevid", "like_count": 5, "url": "https://x/noise"},
+                    ],
+                },
+                "ava": {  # 全噪声 → 整个 persona 跳过
+                    "videos": [{"title": "junkvid", "like_count": 4, "url": "https://x/junk"}],
+                },
+            },
+        }
+        result = render_briefing.format_briefing(
+            data, sample_personas, today=fixed_date, min_likes=500)
+        assert "goodone" in result        # 过线的留
+        assert "noisevid" not in result   # 低赞噪声丢
+        assert "Ava (" not in result      # 全噪声 persona 整个不出现
+        assert "Sophie (" in result       # sophie 还有过线的，保留
+
+    def test_min_likes_default_zero_keeps_all(self, sample_personas, fixed_date) -> None:
+        """min_likes 默认 0：不过滤，低赞也保留（向后兼容）。"""
+        data = {"personas": {"sophie": {"videos": [
+            {"title": "lowvid", "like_count": 5, "url": "https://x/low"}]}}}
+        result = render_briefing.format_briefing(data, sample_personas, today=fixed_date)
+        assert "lowvid" in result
+
     def test_persona_order_matches_spec(self, sample_personas, fixed_date) -> None:
         # v5.4：只渲染有命中的；给 sophie/ava/ezra/leo 命中，验证按 DISPLAY_ORDER 顺序
         vids = [{"title": "x", "like_count": 100, "url": "https://x"}]
@@ -283,14 +312,14 @@ class TestFormatBriefing:
         assert "玩法：正式场合表情 vs 私下情绪反应" in result
         assert "样本：https://www.tiktok.com/@x/video/1 | 50.0万赞" in result
         assert "仿拍：26 人都能蹭" in result
-        assert "—— 以下为各赛道 Top 1 ——" in result
+        assert "—— 以下为各赛道 24h 模板 ——" in result
 
     def test_no_challenges_no_challenge_block(self, sample_personas, fixed_date) -> None:
         """没有 viral_challenges 字段时不显示挑战块"""
         data = {"personas": {}}
         result = render_briefing.format_briefing(data, sample_personas, today=fixed_date)
         assert "全平台热门挑战" not in result
-        assert "—— 以下为各赛道 Top 1 ——" not in result
+        assert "—— 以下为各赛道 24h 模板 ——" not in result
 
     def test_zero_hit_no_placeholder_wording(self, sample_personas, fixed_date) -> None:
         """v5.4：0 命中不再写任何占位文案（旧 v4.6.0 的「0 命中 ≤15s 模板」已废除）。"""
