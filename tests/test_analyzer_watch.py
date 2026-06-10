@@ -5,6 +5,7 @@
 """
 import datetime
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -101,19 +102,108 @@ class TestHandleOf:
         assert watch.handle_of({}) == "?"
 
 
-class TestSeen:
-    def test_roundtrip(self, tmp_path, monkeypatch) -> None:
+class TestStateRoundtrip:
+    def test_missing_file_means_double_baseline(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setattr(watch, "SEEN_FILE", tmp_path / "seen.json")
+        assert watch.load_state() == (None, None)  # (seen baseline 信号, milestones baseline 信号)
+
+    def test_old_format_seen_ok_milestones_none(self, tmp_path, monkeypatch) -> None:
+        """老格式（只有 seen 列表）→ seen 正常读出，milestones=None（触发静默记档，防上线刷屏）。"""
+        f = tmp_path / "seen.json"
+        f.write_text(json.dumps({"seen": ["a", "b"], "count": 2}), encoding="utf-8")
+        monkeypatch.setattr(watch, "SEEN_FILE", f)
+        seen, ms = watch.load_state()
+        assert seen == {"a", "b"} and ms is None
+
+    def test_new_format_roundtrip(self, tmp_path, monkeypatch) -> None:
         monkeypatch.setattr(watch, "STATE_DIR", tmp_path)
         monkeypatch.setattr(watch, "SEEN_FILE", tmp_path / "seen.json")
-        assert watch.load_seen() is None  # 不存在 → None（baseline 信号）
-        watch.save_seen({"a", "b"})
-        assert watch.load_seen() == {"a", "b"}
+        watch.save_state({"a", "b"}, {"a": 10000})
+        assert watch.load_state() == ({"a", "b"}, {"a": 10000})
 
-    def test_corrupt_returns_none(self, tmp_path, monkeypatch) -> None:
+    def test_corrupt_returns_none_none(self, tmp_path, monkeypatch) -> None:
         bad = tmp_path / "seen.json"
         bad.write_text("{not json")
         monkeypatch.setattr(watch, "SEEN_FILE", bad)
-        assert watch.load_seen() is None
+        assert watch.load_state() == (None, None)
+
+
+def _mv(vid: str, views: int, er: float = 3.0) -> dict:
+    """里程碑测试用视频。"""
+    return {"tiktok_video_id": vid, "url": f"https://www.tiktok.com/@x/video/{vid}",
+            "latest_metrics": {"views": views}, "engagement_rate": er}
+
+
+class TestFindMilestoneHits:
+    """升级播报：已预警过(in seen)的视频，播放跨过新档位（>1万 / >10万）再各提醒一次。"""
+
+    TH = [10000, 100000]
+
+    def test_not_in_seen_ignored(self) -> None:
+        # 没首推过的不升级播报（它该走首次预警），播放再高也不报
+        assert watch.find_milestone_hits([_mv("1", 500000)], set(), {}, self.TH) == []
+
+    def test_exactly_at_threshold_no_hit(self) -> None:
+        # 「大于 1万」是严格大于：恰好 10000 不报
+        assert watch.find_milestone_hits([_mv("1", 10000)], {"1"}, {}, self.TH) == []
+
+    def test_cross_first_tier(self) -> None:
+        hits = watch.find_milestone_hits([_mv("1", 10001)], {"1"}, {}, self.TH)
+        assert len(hits) == 1 and hits[0][3] == 10000
+
+    def test_skip_tier_reports_only_top(self) -> None:
+        # 两轮之间直接从几千蹿到 15 万 → 只报「破10万」一张，不连发两张
+        hits = watch.find_milestone_hits([_mv("1", 150000)], {"1"}, {}, self.TH)
+        assert len(hits) == 1 and hits[0][3] == 100000
+
+    def test_second_tier_after_first(self) -> None:
+        # 报过 1万 档后涨到 12 万 → 报 10万 档
+        hits = watch.find_milestone_hits([_mv("1", 120000)], {"1"}, {"1": 10000}, self.TH)
+        assert len(hits) == 1 and hits[0][3] == 100000
+
+    def test_already_top_never_repeats(self) -> None:
+        assert watch.find_milestone_hits([_mv("1", 999999)], {"1"}, {"1": 100000}, self.TH) == []
+
+    def test_same_tier_growth_no_repeat(self) -> None:
+        # 1.2万 报过 1万档，涨到 5 万（仍在 1万-10万 区间）→ 不重复报
+        assert watch.find_milestone_hits([_mv("1", 50000)], {"1"}, {"1": 10000}, self.TH) == []
+
+    def test_empty_thresholds_feature_off(self) -> None:
+        assert watch.find_milestone_hits([_mv("1", 999999)], {"1"}, {}, []) == []
+
+
+class TestBaselineMilestones:
+    """上线第一轮静默记档：把 seen 里历史视频按当前播放记档，不发卡（防把历史爆款刷一遍群）。"""
+
+    def test_records_top_crossed_only_for_seen(self) -> None:
+        videos = [_mv("a", 150000), _mv("b", 20000), _mv("c", 500), _mv("d", 999999)]
+        ms = watch.baseline_milestones(videos, {"a", "b", "c"}, [10000, 100000])
+        assert ms == {"a": 100000, "b": 10000}  # c 没过档不记；d 不在 seen 不记
+
+    def test_empty(self) -> None:
+        assert watch.baseline_milestones([], set(), [10000, 100000]) == {}
+
+
+class TestMilestoneLabel:
+    def test_wan(self) -> None:
+        assert watch.milestone_label(10000) == "播放破1万"
+        assert watch.milestone_label(100000) == "播放破10万"
+        assert watch.milestone_label(500000) == "播放破50万"
+
+    def test_non_wan_fallback(self) -> None:
+        assert watch.milestone_label(5000) == "播放破5000"
+
+
+class TestParseMilestones:
+    def test_default(self) -> None:
+        assert watch.parse_milestones("10000,100000") == [10000, 100000]
+
+    def test_dedup_sort_and_garbage(self) -> None:
+        assert watch.parse_milestones("100000, 10000,10000, abc, -5") == [10000, 100000]
+
+    def test_empty_means_off(self) -> None:
+        assert watch.parse_milestones("") == []
+        assert watch.parse_milestones(None) == []
 
 
 class TestLoadConfig:
@@ -133,6 +223,7 @@ class TestLoadConfig:
         assert cfg["er_min_views"] == 0
         assert cfg["base_url"] == "http://x:8001"
         assert cfg["email"] == "a@b.com"
+        assert cfg["milestones"] == [10000, 100000]  # 没配 milestone_thresholds → 默认两档
 
     def test_quoted_value_with_hash_kept(self, tmp_path, monkeypatch) -> None:
         """带引号的值里的 # 不算注释（webhook URL 可能含特殊字符）。"""

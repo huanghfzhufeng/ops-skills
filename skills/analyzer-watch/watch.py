@@ -11,6 +11,9 @@
 
 命中逻辑：播放 > view_threshold  或  ( ER > er_threshold% 且 播放 >= er_min_views )
 
+升级播报（里程碑）：已预警过的视频，播放再跨过 milestone_thresholds 档位（默认 1万/10万）
+    时各再提醒一次（橙色卡），每档一次、跳档只报最高档。状态升级第一轮静默记档不补发历史。
+
 卡片封面图（可选，配了 feishu_app_id/secret 才启用）：
     个人飞书自建应用加不了群，所以走「app 只上传图、发送仍用 webhook」——webhook 认 app
     上传的 image_key。封面 URL 用 TikTok oEmbed 实时取（analyzer 存的带签名、会过期）。
@@ -36,10 +39,26 @@ CONFIG_FILE = STATE_DIR / "analyzer-watch.yaml"
 SEEN_FILE = STATE_DIR / "analyzer-watch-seen.json"
 PUSHLOG_FILE = STATE_DIR / "analyzer-watch-pushlog.jsonl"
 MAX_PUSH = 15        # 单次推送上限，防异常爆量刷屏 + 飞书限流
+MAX_MILESTONE_PUSH = 10  # 单次升级播报上限；超出的不记档，下轮自动续推
 FETCH_LIMIT = 50000  # 拉全量视频的 limit；设远大于总视频数，逼近时告警
 FEISHU = "https://open.feishu.cn/open-apis"
 UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+
+
+def parse_milestones(raw: str | None) -> list[int]:
+    """解析升级播报档位（逗号分隔）。非法项忽略；空/全非法 → []（= 功能关闭）。"""
+    out = set()
+    for part in (raw or "").replace("，", ",").split(","):
+        part = part.strip()
+        if part.isdigit() and int(part) > 0:
+            out.add(int(part))
+    return sorted(out)
+
+
+def milestone_label(t: int) -> str:
+    """档位 → 中文标签：10000 → 播放破1万，100000 → 播放破10万。"""
+    return f"播放破{t // 10000}万" if t >= 10000 and t % 10000 == 0 else f"播放破{t}"
 
 
 def load_config() -> dict:
@@ -75,6 +94,8 @@ def load_config() -> dict:
         "app_id": g("feishu_app_id"),        # 可选：封面图用
         "app_secret": g("feishu_app_secret"),
         "proxy": g("proxy"),                  # 可选：访问 TikTok 用
+        # 升级播报档位（已预警视频破档再提醒）；配空/非法 = 关闭
+        "milestones": parse_milestones(g("milestone_thresholds", "10000,100000")),
     }
     missing = [k for k in ("base_url", "email", "password", "webhook") if not cfg[k]]
     if missing:
@@ -164,19 +185,62 @@ def find_hits(videos: list[dict], cfg: dict) -> list[tuple]:
     return out
 
 
-def load_seen() -> set[str] | None:
+def find_milestone_hits(videos: list[dict], seen: set[str],
+                        milestones: dict[str, int], thresholds: list[int]) -> list[tuple]:
+    """升级播报命中：已预警过(in seen)的视频，播放跨过新档位 → (video, views, er, 档位)。
+    跳档只报最高档（一轮之间从几千蹿到 15 万只发一张「破10万」，不连发两张）。"""
+    out = []
+    for v in videos:
+        vid = v.get("tiktok_video_id")
+        if vid not in seen:
+            continue
+        views = (v.get("latest_metrics") or {}).get("views") or 0
+        lvl = max((t for t in thresholds if views > t), default=0)
+        if lvl and lvl > milestones.get(vid, 0):
+            out.append((v, views, v.get("engagement_rate") or 0, lvl))
+    return out
+
+
+def baseline_milestones(videos: list[dict], seen: set[str], thresholds: list[int]) -> dict[str, int]:
+    """静默记档：seen 里的视频按当前播放记下已过的最高档位（不发卡）。
+    状态升级后的第一轮用——否则会把历史上所有破万视频补发一遍刷爆群。"""
+    ms: dict[str, int] = {}
+    for v in videos:
+        vid = v.get("tiktok_video_id")
+        if vid not in seen:
+            continue
+        views = (v.get("latest_metrics") or {}).get("views") or 0
+        lvl = max((t for t in thresholds if views > t), default=0)
+        if lvl:
+            ms[vid] = lvl
+    return ms
+
+
+def load_state() -> tuple[set[str] | None, dict[str, int] | None]:
+    """读状态文件。返回 (seen, milestones)：
+    - 文件不存在/损坏 → (None, None)，seen 走 baseline（只记不推）
+    - 老格式（无 milestones 键）→ (seen, None)，里程碑走静默记档"""
     if not SEEN_FILE.exists():
-        return None
+        return None, None
     try:
-        return set(json.loads(SEEN_FILE.read_text(encoding="utf-8"))["seen"])
-    except (json.JSONDecodeError, OSError, KeyError):
-        return None
+        data = json.loads(SEEN_FILE.read_text(encoding="utf-8"))
+        seen = set(data["seen"])
+    except (json.JSONDecodeError, OSError, KeyError, TypeError):
+        return None, None
+    try:
+        ms = data.get("milestones")
+        if not isinstance(ms, dict):
+            return seen, None
+        return seen, {str(k): int(v) for k, v in ms.items()}
+    except (ValueError, TypeError):
+        return seen, None
 
 
-def save_seen(ids: set[str]) -> None:
+def save_state(ids: set[str], milestones: dict[str, int]) -> None:
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     tmp = SEEN_FILE.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps({"seen": sorted(ids), "count": len(ids)}, ensure_ascii=False),
+    tmp.write_text(json.dumps({"seen": sorted(ids), "count": len(ids),
+                               "milestones": milestones}, ensure_ascii=False),
                    encoding="utf-8")
     tmp.replace(SEEN_FILE)
 
@@ -270,8 +334,10 @@ def fetch_cover_image_key(cfg: dict, video_url: str, app_token: str | None) -> s
     return upload_feishu_image(app_token, img)
 
 
-def push_card(cfg: dict, v: dict, views: int, er: float, app_token: str | None) -> bool:
-    """有封面 → 左图右文小卡片；拿不到封面 → 降级纯文字卡。整卡点击跳转视频。"""
+def push_card(cfg: dict, v: dict, views: int, er: float, app_token: str | None,
+              title: str | None = None, template: str = "red") -> bool:
+    """有封面 → 左图右文小卡片；拿不到封面 → 降级纯文字卡。整卡点击跳转视频。
+    title/template 可换标题与配色：首次预警红卡（默认），升级播报橙卡。"""
     m = v.get("latest_metrics") or {}
     rel = rel_time(v.get("created_at"))
     parts = [f"{label} {m.get(k, 0)}" for k, label in
@@ -298,7 +364,8 @@ def push_card(cfg: dict, v: dict, views: int, er: float, app_token: str | None) 
     card = {"msg_type": "interactive", "card": {
         "config": {"wide_screen_mode": True},
         "card_link": {"url": url},
-        "header": {"title": {"tag": "plain_text", "content": f"爆款预警 · @{handle_of(v)}"}, "template": "red"},
+        "header": {"title": {"tag": "plain_text",
+                             "content": title or f"爆款预警 · @{handle_of(v)}"}, "template": template},
         "elements": elements,
     }}
     try:
@@ -323,8 +390,9 @@ def cmd_run(args: argparse.Namespace) -> int:
     truncated_fetch = len(videos) >= FETCH_LIMIT
 
     hit_list = find_hits(videos, cfg)
-    seen = load_seen()
+    seen, milestones = load_state()
     current_ids = {v["tiktok_video_id"] for v, *_ in hit_list}
+    ths = cfg["milestones"]
 
     def stamp(out: dict) -> dict:
         if truncated_fetch:
@@ -332,41 +400,82 @@ def cmd_run(args: argparse.Namespace) -> int:
         return out
 
     if seen is None:
-        save_seen(current_ids)
+        # 首次跑：seen 与里程碑档位一起静默建 baseline，不推
+        save_state(current_ids, baseline_milestones(videos, current_ids, ths))
         print(json.dumps(stamp({"mode": "baseline", "total_hits": len(hit_list), "pushed": 0}),
                          ensure_ascii=False))
         return 0
 
     new = [(v, vw, er, r) for v, vw, er, r in hit_list if v["tiktok_video_id"] not in seen]
 
+    # 升级播报：老状态文件没有 milestones → 本轮静默记档（防把历史破万视频补发刷屏），下轮起增量
+    ms_baseline = milestones is None
+    if ms_baseline:
+        milestones = baseline_milestones(videos, seen, ths)
+        m_hits: list[tuple] = []
+    else:
+        m_hits = find_milestone_hits(videos, seen, milestones, ths)
+
     if args.dry_run:
         print(json.dumps({"mode": "dry-run", "new": len(new), "videos": [
             {"handle": handle_of(v), "reasons": r, "views": vw, "er": er, "url": v["url"]}
-            for v, vw, er, r in new]}, ensure_ascii=False, indent=2))
+            for v, vw, er, r in new],
+            "milestone_mode": "baseline" if ms_baseline else "incremental",
+            "milestone_new": [
+                {"handle": handle_of(v), "level": milestone_label(lv), "views": vw, "url": v["url"]}
+                for v, vw, _er, lv in m_hits]}, ensure_ascii=False, indent=2))
         return 0
 
-    if not new:
+    if not new and not m_hits and not ms_baseline:
         print(json.dumps(stamp({"mode": "incremental", "new": 0, "pushed": 0}), ensure_ascii=False))
         return 0
 
+    app_token = get_tenant_token(cfg) if (new or m_hits) else None  # 封面用；None 则降级纯文字卡
+    now = datetime.datetime.now().astimezone().replace(microsecond=0).isoformat()
+    pushed, logs = [], []
+
+    # —— 首次预警（红卡）——
     truncated = len(new) > MAX_PUSH
     batch = sorted(new, key=lambda x: -x[1])[:MAX_PUSH]
-    app_token = get_tenant_token(cfg)  # 封面用；None 则全部降级纯文字卡
-
-    pushed, logs = [], []
-    now = datetime.datetime.now().astimezone().replace(microsecond=0).isoformat()
     for v, vw, er, r in batch:
         if push_card(cfg, v, vw, er, app_token):
             pushed.append(v["tiktok_video_id"])
             logs.append({"pushed_at": now, "handle": handle_of(v), "views": vw,
                          "er": er, "reasons": r, "url": v["url"]})
-    save_seen(seen | set(pushed))
+            # 首推时按当前播放静默记档：首推卡已显示真实播放，再补一张「破1万」是噪音
+            lvl = max((t for t in ths if vw > t), default=0)
+            if lvl:
+                milestones[v["tiktok_video_id"]] = lvl
+
+    # —— 升级播报（橙卡，已预警视频跨档再提醒；每档一次，失败不记档下轮重试）——
+    m_truncated = len(m_hits) > MAX_MILESTONE_PUSH
+    m_batch = sorted(m_hits, key=lambda x: -x[1])[:MAX_MILESTONE_PUSH]
+    m_pushed = 0
+    for v, vw, er, lv in m_batch:
+        label = milestone_label(lv)
+        if push_card(cfg, v, vw, er, app_token,
+                     title=f"升级播报 · @{handle_of(v)} · {label}", template="orange"):
+            milestones[v["tiktok_video_id"]] = lv
+            m_pushed += 1
+            logs.append({"pushed_at": now, "kind": "milestone", "handle": handle_of(v),
+                         "views": vw, "er": er, "reasons": [label], "url": v["url"]})
+
+    save_state(seen | set(pushed), milestones)
     append_pushlog(logs)
 
     out = stamp({"mode": "incremental", "new": len(new), "pushed": len(pushed),
                  "cover": "on" if app_token else "off"})
+    if ms_baseline:
+        out["milestone_mode"] = "baseline"
+        out["milestone_recorded"] = len(milestones)
+    else:
+        out["milestone_new"] = len(m_hits)
+        out["milestone_pushed"] = m_pushed
     if truncated:
         out["note"] = f"本轮 {len(new)} 条超上限，按播放推了前 {MAX_PUSH} 条，剩余下轮继续"
+    if m_truncated:
+        out["milestone_note"] = (f"升级播报 {len(m_hits)} 条超上限，推了前 {MAX_MILESTONE_PUSH} 条，"
+                                 f"剩余下轮继续")
     print(json.dumps(out, ensure_ascii=False))
     return 0
 
