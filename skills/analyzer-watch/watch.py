@@ -11,7 +11,7 @@
 
 命中逻辑：播放 > view_threshold  或  ( ER > er_threshold% 且 播放 >= er_min_views )
 
-升级播报（里程碑）：已预警过的视频，播放再跨过 milestone_thresholds 档位（默认 1万/10万）
+爆款战报（里程碑）：已预警过的视频，播放再跨过 milestone_thresholds 档位（默认 1万/10万）
     时各再提醒一次（橙色卡），每档一次、跳档只报最高档。状态升级第一轮静默记档不补发历史。
 
 卡片封面图（可选，配了 feishu_app_id/secret 才启用）：
@@ -39,7 +39,7 @@ CONFIG_FILE = STATE_DIR / "analyzer-watch.yaml"
 SEEN_FILE = STATE_DIR / "analyzer-watch-seen.json"
 PUSHLOG_FILE = STATE_DIR / "analyzer-watch-pushlog.jsonl"
 MAX_PUSH = 15        # 单次推送上限，防异常爆量刷屏 + 飞书限流
-MAX_MILESTONE_PUSH = 10  # 单次升级播报上限；超出的不记档，下轮自动续推
+MAX_MILESTONE_PUSH = 10  # 单次爆款战报上限；超出的不记档，下轮自动续推
 FETCH_LIMIT = 50000  # 拉全量视频的 limit；设远大于总视频数，逼近时告警
 FEISHU = "https://open.feishu.cn/open-apis"
 UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
@@ -47,7 +47,7 @@ UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
 
 
 def parse_milestones(raw: str | None) -> list[int]:
-    """解析升级播报档位（逗号分隔）。非法项忽略；空/全非法 → []（= 功能关闭）。"""
+    """解析爆款战报档位（逗号分隔）。非法项忽略；空/全非法 → []（= 功能关闭）。"""
     out = set()
     for part in (raw or "").replace("，", ",").split(","):
         part = part.strip()
@@ -94,7 +94,7 @@ def load_config() -> dict:
         "app_id": g("feishu_app_id"),        # 可选：封面图用
         "app_secret": g("feishu_app_secret"),
         "proxy": g("proxy"),                  # 可选：访问 TikTok 用
-        # 升级播报档位（已预警视频破档再提醒）；配空/非法 = 关闭
+        # 爆款战报档位（已预警视频破档再提醒）；配空/非法 = 关闭
         "milestones": parse_milestones(g("milestone_thresholds", "10000,100000")),
     }
     missing = [k for k in ("base_url", "email", "password", "webhook") if not cfg[k]]
@@ -187,7 +187,7 @@ def find_hits(videos: list[dict], cfg: dict) -> list[tuple]:
 
 def find_milestone_hits(videos: list[dict], seen: set[str],
                         milestones: dict[str, int], thresholds: list[int]) -> list[tuple]:
-    """升级播报命中：已预警过(in seen)的视频，播放跨过新档位 → (video, views, er, 档位)。
+    """爆款战报命中：已预警过(in seen)的视频，播放跨过新档位 → (video, views, er, 档位)。
     跳档只报最高档（一轮之间从几千蹿到 15 万只发一张「破10万」，不连发两张）。"""
     out = []
     for v in videos:
@@ -337,7 +337,7 @@ def fetch_cover_image_key(cfg: dict, video_url: str, app_token: str | None) -> s
 def push_card(cfg: dict, v: dict, views: int, er: float, app_token: str | None,
               title: str | None = None, template: str = "red") -> bool:
     """有封面 → 左图右文小卡片；拿不到封面 → 降级纯文字卡。整卡点击跳转视频。
-    title/template 可换标题与配色：首次预警红卡（默认），升级播报橙卡。"""
+    title/template 可换标题与配色：首次预警红卡（默认），爆款战报橙卡。"""
     m = v.get("latest_metrics") or {}
     rel = rel_time(v.get("created_at"))
     parts = [f"{label} {m.get(k, 0)}" for k, label in
@@ -408,7 +408,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     new = [(v, vw, er, r) for v, vw, er, r in hit_list if v["tiktok_video_id"] not in seen]
 
-    # 升级播报：老状态文件没有 milestones → 本轮静默记档（防把历史破万视频补发刷屏），下轮起增量
+    # 爆款战报：老状态文件没有 milestones → 本轮静默记档（防把历史破万视频补发刷屏），下轮起增量
     ms_baseline = milestones is None
     if ms_baseline:
         milestones = baseline_milestones(videos, seen, ths)
@@ -447,14 +447,14 @@ def cmd_run(args: argparse.Namespace) -> int:
             if lvl:
                 milestones[v["tiktok_video_id"]] = lvl
 
-    # —— 升级播报（橙卡，已预警视频跨档再提醒；每档一次，失败不记档下轮重试）——
+    # —— 爆款战报（橙卡，已预警视频跨档再提醒；每档一次，失败不记档下轮重试）——
     m_truncated = len(m_hits) > MAX_MILESTONE_PUSH
     m_batch = sorted(m_hits, key=lambda x: -x[1])[:MAX_MILESTONE_PUSH]
     m_pushed = 0
     for v, vw, er, lv in m_batch:
         label = milestone_label(lv)
         if push_card(cfg, v, vw, er, app_token,
-                     title=f"升级播报 · @{handle_of(v)} · {label}", template="orange"):
+                     title=f"爆款战报 · @{handle_of(v)} · {label}", template="orange"):
             milestones[v["tiktok_video_id"]] = lv
             m_pushed += 1
             logs.append({"pushed_at": now, "kind": "milestone", "handle": handle_of(v),
@@ -474,7 +474,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     if truncated:
         out["note"] = f"本轮 {len(new)} 条超上限，按播放推了前 {MAX_PUSH} 条，剩余下轮继续"
     if m_truncated:
-        out["milestone_note"] = (f"升级播报 {len(m_hits)} 条超上限，推了前 {MAX_MILESTONE_PUSH} 条，"
+        out["milestone_note"] = (f"爆款战报 {len(m_hits)} 条超上限，推了前 {MAX_MILESTONE_PUSH} 条，"
                                  f"剩余下轮继续")
     print(json.dumps(out, ensure_ascii=False))
     return 0

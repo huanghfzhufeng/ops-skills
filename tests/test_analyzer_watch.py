@@ -135,12 +135,12 @@ def _mv(vid: str, views: int, er: float = 3.0) -> dict:
 
 
 class TestFindMilestoneHits:
-    """升级播报：已预警过(in seen)的视频，播放跨过新档位（>1万 / >10万）再各提醒一次。"""
+    """爆款战报：已预警过(in seen)的视频，播放跨过新档位（>1万 / >10万）再各提醒一次。"""
 
     TH = [10000, 100000]
 
     def test_not_in_seen_ignored(self) -> None:
-        # 没首推过的不升级播报（它该走首次预警），播放再高也不报
+        # 没首推过的不爆款战报（它该走首次预警），播放再高也不报
         assert watch.find_milestone_hits([_mv("1", 500000)], set(), {}, self.TH) == []
 
     def test_exactly_at_threshold_no_hit(self) -> None:
