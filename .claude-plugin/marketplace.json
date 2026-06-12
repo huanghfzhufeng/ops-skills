@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "ops-skills",
-  "description": "美区 TikTok 矩阵运营工具集（单 plugin）：热点抓取 + TK 模板搜索 + xcmo 视频拉取手机分享 + SGE 博客监听 + 自家号爆款预警。",
+  "description": "美区 TikTok 矩阵运营工具集（单 plugin）：热点抓取 + TK 模板搜索 + 赛道链接清单 + xcmo 视频拉取手机分享 + SGE 博客监听 + 自家号爆款预警。",
   "owner": {
     "name": "huanghfzhufeng",
     "url": "https://github.com/huanghfzhufeng"
@@ -10,8 +10,8 @@
     {
       "name": "ops-skills",
       "source": "./",
-      "description": "美区 TikTok 矩阵运营 Claude 工具集：(1) 每天自动抓美区 TikTok 热点配 26 数字角色出创意，简报到对话；(2) TK 模板搜索 26 人 × 3 词出 Top 3 模板，MVP 模式 + 严格 24h Playwright 模式可选；(3) 按邮箱+日期从 xcmo 拉视频按人物分组下载并生成可手机扫码的本地分享站；(4) 每 10 分钟监听 Social Growth Engineers 博客，新文章自动推飞书群（中文标题+摘要+正文 TL;DR，一篇一卡）；(5) 每 10 分钟监听自建 TikTok Analyzer 后台，自家号视频播放破 500 或 ER 破 5% 的爆款带封面图实时推飞书群。",
-      "version": "5.5.0",
+      "description": "美区 TikTok 矩阵运营 Claude 工具集：(1) 每天自动抓美区 TikTok 热点配 26 数字角色出创意，简报到对话；(2) TK 模板搜索 26 人 × 3 词出 Top 3 模板，MVP 模式 + 严格 24h Playwright 模式可选；(3) 赛道爆款链接清单：给一个赛道产 1000+ 条实测真链接（2026·≤15s·≥100万），UGC 可仿拍模板置顶，内置搞笑/美妆/穿搭词典；(4) 按邮箱+日期从 xcmo 拉视频按人物分组下载并生成可手机扫码的本地分享站；(5) 每 10 分钟监听 Social Growth Engineers 博客，新文章自动推飞书群（中文标题+摘要+正文 TL;DR，一篇一卡）；(6) 每 10 分钟监听自建 TikTok Analyzer 后台，自家号视频播放破 500 或 ER 破 5% 的爆款带封面图实时推飞书群。",
+      "version": "5.6.0",
       "category": "content-creation",
       "homepage": "https://github.com/huanghfzhufeng/ops-skills"
     }

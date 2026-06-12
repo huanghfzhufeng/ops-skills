@@ -1,0 +1,213 @@
+# 搞笑赛道配置 —— 2026-06-12 实战交付 1715 条的原版词典
+niche: comedy
+display_name: 搞笑
+scope_note: 仅搞笑(人类段子/情景/standup/街访)；宠物搞笑不算；名人也收(沉底分桶)
+
+# 收割器两条流，各 30 词，温和串行跑
+queries_stream1:
+  - comedy
+  - funny
+  - skit
+  - comedy skit
+  - funny videos
+  - try not to laugh
+  - comedian
+  - stand up comedy
+  - standup clips
+  - crowd work
+  - funny moments
+  - prank
+  - jokes
+  - sketch comedy
+  - funny skits
+  - viral comedy
+  - funny clips
+  - relatable comedy
+  - couple comedy
+  - dad jokes
+  - improv comedy
+  - roast
+  - parody
+  - dark humor
+  - comedy shorts
+  - funny fails
+  - impressions
+  - character comedy
+  - gen z humor
+  - funny 2026
+queries_stream2:
+  - storytime funny
+  - stitch comedy
+  - duet comedy
+  - voiceover funny
+  - greenscreen comedy
+  - comedy monologue
+  - rant comedy
+  - awkward funny
+  - cringe comedy
+  - first date funny
+  - job interview funny
+  - boss funny
+  - coworker comedy
+  - landlord funny
+  - airport funny
+  - online dating funny
+  - group chat funny
+  - wedding funny
+  - family dinner funny
+  - church funny
+  - southern comedy
+  - midwest funny
+  - nyc comedy
+  - college funny
+  - dorm funny
+  - broke funny
+  - adulting funny
+  - little brother funny
+  - best friend funny
+  - funny conversation
+
+# 大号桶来源：榜单站(跑的时候 WebFetch 现薅) + 验证过的种子底仓
+list_sites:
+  - https://creators.feedspot.com/comedy_tiktok_influencers/
+  - https://neoreach.com/31-funny-tiktok-accounts/
+  - https://socialbook.io/blog/18-fastest-growing-american-tiktok-creators-in-2026/
+seed_handles:
+  - adamw
+  - brookemonk_
+  - zachking
+  - kingbach
+  - lizakoshy
+  - hannahstocking
+  - lelepons
+  - anwar
+  - rudymancuso
+  - trevorwallace
+  - charlieberens
+  - stevenhe
+  - adamrayokay
+  - brittany_broski
+  - caseyfrey
+  - octopusslover8
+  - itsqcp
+  - scottfrenzel
+  - spencewuah
+  - larray
+  - quenblackwell
+  - nichlmao
+  - mightyduck
+  - desibanks
+  - druski
+  - matt_rife
+  - jasonbankscomedy
+  - danielelabelle
+  - daniellabelle1
+  - morganjay
+  - bigtugg
+  - andreaspoly
+  - ben_brainard
+  - johncristcomedian
+  - carterandersoncomedy
+  - kallmekris
+  - comedydynamics
+  - netflixisajoke
+  - comedycentral
+  - failarmy
+  - daquan
+  - 85southshow
+  - imjoshingit__
+  - ajbrennan95
+
+# 净化信号（正则片段，运行时 | 拼接编译）
+caption_pos:
+  - funny
+  - comedy
+  - comedic
+  - comedian
+  - skit
+  - pov
+  - humor
+  - humour
+  - joke
+  - prank
+  - parody
+  - satire
+  - relatable
+  - lmao+
+  - lmfao
+  - lolol
+  - "\U0001F602"   # 😂
+  - "\U0001F923"   # 🤣
+  - "\U0001F480"   # 💀
+caption_neg:
+  - makeup
+  - skincare
+  - skin care
+  - haircare
+  - hair tutorial
+  - hairstyle
+  - booktok
+  - book rec
+  - recipe
+  - cooking
+  - outfit
+  - ootd
+  - fashion
+  - grwm
+  - nail art
+  - nails done
+  - workout
+  - fitness
+  - gym routine
+  - asmr
+  - unboxing
+  - haul
+  - home decor
+  - diy project
+  - dogsoftiktok
+  - catsoftiktok
+  - "#dog\\b"
+  - "#puppy"
+  - "#kitten"
+  - cleantok
+  - beautytok
+handle_pos:
+  - comed
+  - funny
+  - skit
+  - humor
+  - humour
+  - joke
+  - laugh
+  - prank
+  - satir
+  - parod
+handle_neg:
+  - beauty
+  - booktok
+  - makeup
+  - skincare
+  - recipe
+  - kitchen
+  - salon
+  - boutique
+  - depot
+  - realtor
+  - crypto
+  - fitness
+  - nutrition
+  - kitten
+  - meow
+  - puppy
+  - thegolden
+handle_neg_patterns:
+  - "(^|[^c])hair"      # hair 命中但放过 chair
+blacklist:
+  - alixearle           # 时尚生活方式，搞笑赛道杂号(实战踢过)
+  - haleyybaylee
+  - cassiesbooktok
+
+ugc_follower_cap: 500000
+pet_filter: true
+ad_filter: false          # 搞笑赛道带货密度低，实战未启用
+strict_zero_pos: false    # 搞笑 caption 常无词(纯画面梗)，不搞零正信号即踢

@@ -1,0 +1,195 @@
+# 时尚穿搭赛道配置 —— 2026-06-12 实战交付 1458 条的原版词典
+niche: fashion
+display_name: 时尚穿搭
+scope_note: 服装+鞋包配饰，男女都收；美妆/发型/健身当杂号踢；与 beauty 名单视频级去重(--dedup-against)
+
+queries_stream1:
+  - outfit ideas
+  - ootd
+  - outfit inspo
+  - styling tips
+  - how to style
+  - fashion haul
+  - lookbook
+  - capsule wardrobe
+  - summer outfits
+  - jeans outfit
+  - dress styling
+  - old money outfit
+  - streetwear outfit
+  - casual outfit ideas
+  - date night outfit
+  - vacation outfits
+  - concert outfit
+  - office outfit
+  - petite fashion
+  - midsize fashion
+  - plus size outfits
+  - tall girl fashion
+  - thrift haul
+  - thrifted outfit
+  - amazon fashion finds
+  - jewelry stacking
+  - accessories styling
+  - fit check
+  - outfit transition
+  - wardrobe essentials
+queries_stream2:
+  - mens fashion
+  - mens outfit ideas
+  - mens streetwear
+  - mens style tips
+  - sneaker rotation
+  - sneakers outfit
+  - shoe collection
+  - designer bag
+  - bag collection
+  - purse essentials
+  - what i wore
+  - grwm outfit
+  - outfit of the day
+  - style challenge
+  - styling one item
+  - outfit formula
+  - color analysis outfit
+  - winter outfits
+  - spring outfits
+  - festival outfit
+  - wedding guest outfit
+  - airport outfit
+  - brunch outfit
+  - athleisure outfit
+  - denim styling
+  - leather jacket outfit
+  - white sneakers outfit
+  - minimalist wardrobe
+  - fashion tips
+  - style hacks
+
+list_sites:
+  - https://creators.feedspot.com/fashion_tiktok_influencers/
+  - https://www.tokportal.com/data/tiktok-top-accounts-by-niche/fashion
+seed_handles:
+  - wisdm8
+  - brittany.xavier
+  - remibader
+  - katebartlett
+  - carlarockmore
+  - charlesgross
+  - davisburleson
+  - allisonbornstein6
+  - gabifresh
+  - april_lockhart
+  - oldloserinbrooklyn
+  - tinyjewishgirl
+  - denisemmercedes
+  - milan.mathew
+  - kristinazias
+  - allie.provost
+  - clairerose
+  - dapperdom
+  - kyransfits
+  - kendraabennett
+
+caption_pos:
+  - outfit
+  - ootd
+  - styling
+  - styled
+  - "style[sd]?\\b"
+  - fashion
+  - wardrobe
+  - lookbook
+  - haul
+  - thrift
+  - sneaker
+  - heels
+  - boots
+  - "bag\\b"
+  - purse
+  - jewelry
+  - jewellery
+  - accessor
+  - dress
+  - jeans
+  - denim
+  - streetwear
+  - fit check
+  - fitcheck
+  - capsule
+  - "\U0001F457"   # 👗
+  - "\U0001F460"   # 👠
+  - "\U0001F6CD"   # 🛍
+caption_neg:
+  - makeup
+  - skincare
+  - skin care
+  - mascara
+  - lipstick
+  - serum
+  - foundation shade
+  - recipe
+  - cooking
+  - foodtok
+  - booktok
+  - workout
+  - gym
+  - fitness
+  - protein
+  - hairstyle
+  - haircut
+  - haircare
+  - nail art
+  - nail tech
+  - "\\bskit\\b"
+  - prank
+  - standup
+  - dogsoftiktok
+  - catsoftiktok
+  - "#dog\\b"
+  - "#puppy"
+  - "#kitten"
+  - crypto
+  - realtor
+  - gaming
+handle_pos:
+  - fashion
+  - style
+  - styl
+  - outfit
+  - ootd
+  - wear
+  - cloth
+  - "fit[sz]?\\b"
+  - wardrobe
+  - thrift
+  - sneaker
+handle_neg:
+  - makeup
+  - beauty
+  - skincare
+  - comedy
+  - funny
+  - skit
+  - kitchen
+  - recipe
+  - fitness
+  - gym
+  - nails
+  - nailart
+  - hairby
+  - hairstylist
+  - barber
+  - kitten
+  - puppy
+  - realtor
+  - crypto
+  - gaming
+  - booktok
+handle_neg_patterns: []
+blacklist: []
+
+ugc_follower_cap: 500000
+pet_filter: true
+ad_filter: true           # 穿搭带货密度最高(实战剔 48 条硬广)，必开
+strict_zero_pos: true
