@@ -4,6 +4,22 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [5.6.0] - 2026-06-12
+
+### Added - tk-niche-scout：赛道爆款链接清单生成器（第 6 个 skill）
+
+**为什么加** — 运营需求（cici / Calanthia）：按赛道要 1000+ 条美区爆款短视频真链接清单（2026 · ≤15 秒 · 播放 ≥100 万），UGC 可仿拍模板优先。6/12 实战连交三单：搞笑 1715 / 美妆 1227 / 时尚穿搭 1458，合计 4400 条，方法论当天蒸馏成 skill。
+
+**做法** — 五步流水线全脚本化：
+- **三渠道找号**：yaml 种子底仓 + 榜单站 WebFetch 现薅（Feedspot 最干净，TokPortal 须人工剔品牌/非美区）+ 60 个赛道格式词搜索雪球（素人号唯一来源，`harvest.py` 单 context 串行 + 2-4s 抖动 —— 实测 4 并发轰炸数分钟内全员软拦截）
+- **yt-dlp 扫主页**（`enumerate_profiles.py`）：免 cookie，硬标准 `--match-filter` 当场过滤；失败率 ≥40% 判限流 → 退避 60s×轮次重试（沿用 scout_strict v5.3 配方），实战 3 赛道 ~1900 号零封禁
+- **四道净化**（`autopilot.py` + `tk_lib.py` 纯函数）：跨赛道 URL 去重（`--dedup-against`）→ 视频级硬广（#ad/折扣码话术）→ 账号名规则（区域后缀/品牌号/宠物号/黑名单）→ 账号级 caption 正负信号打分，被踢的带原因进 removed 存档可捞回
+- **粉丝分桶**：curl 主页 HTML 抠 `followerCount`（单视频 yt-dlp JSON 无此字段），≤50 万 = UGC模板桶置顶按播放/粉丝比降序（比值高 = 格式驱动 = 可仿拍）
+- **autopilot 幂等**：每步 state 文件即跳过，断电/被杀重启接着跑（实战经历一次半夜重启验证）；`--guard-window` 默认避让 08:28-08:55 生产定时窗
+- 内置 `niches/{comedy,beauty,fashion}.yaml` 实战原版词典；新赛道复制 yaml 改五块即跑；`tests/test_tk_niche_scout.py` 34 个纯函数单测
+
+**边界（SKILL.md 明示）** — 赛道纯度 ~90-95%（不看视频的天花板）；硬广只抓明示标签；hashtag 聚合页对自动化通过率 ~2.6% 不可当数据源。
+
 ## [5.5.0] - 2026-06-08
 
 ### Added - analyzer-watch：自家号爆款视频实时预警（第 5 个 skill）

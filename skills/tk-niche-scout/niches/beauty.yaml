@@ -1,0 +1,197 @@
+# 美妆赛道配置 —— 2026-06-12 实战交付 1227 条的原版词典
+niche: beauty
+display_name: 美妆
+scope_note: 彩妆+护肤；发型/美甲不算(当杂号踢)；名人也收(沉底分桶)
+
+queries_stream1:
+  - makeup tutorial
+  - grwm makeup
+  - makeup hack
+  - makeup transformation
+  - before and after makeup
+  - no makeup makeup
+  - clean girl makeup
+  - full face makeup
+  - drugstore makeup
+  - makeup dupe
+  - lip combo
+  - blush hack
+  - contour tutorial
+  - eyeliner tutorial
+  - lashes tutorial
+  - brows tutorial
+  - foundation routine
+  - concealer hack
+  - soft glam
+  - latina makeup
+  - black girl makeup
+  - wedding makeup
+  - prom makeup
+  - graduation makeup
+  - summer makeup
+  - makeup for beginners
+  - viral makeup
+  - makeup trend
+  - asmr makeup
+  - makeup routine
+queries_stream2:
+  - skincare routine
+  - skin care tips
+  - skincare hack
+  - glass skin
+  - skin transformation
+  - acne skincare
+  - skincare for beginners
+  - am skincare
+  - pm skincare
+  - korean skincare
+  - skin cycling
+  - retinol routine
+  - spf routine
+  - oily skin routine
+  - dry skin routine
+  - sensitive skin routine
+  - glowy skin
+  - skin tint
+  - lip oil
+  - lip liner hack
+  - setting spray hack
+  - double cleanse
+  - face mask routine
+  - esthetician tips
+  - skincare dupe
+  - viral skincare
+  - sephora haul
+  - ulta haul
+  - makeup storage
+  - everyday makeup
+
+list_sites:
+  - https://creators.feedspot.com/beauty_tiktok_influencers/
+  - https://www.tokportal.com/data/tiktok-top-accounts-by-niche/beauty
+  - https://www.amraandelma.com/top-makeup-influencers-on-tiktok/
+seed_handles:
+  - mikaylanogueira
+  - meredithduxbury
+  - paintedbyspencer
+  - emmycombss
+  - jeffreestar
+  - monetmcmichael
+  - jackieaina
+  - christendominique
+  - alexandra_anele
+  - brittanybearmakeup
+  - allieglines
+  - adrianamejiamakeup
+  - morganturnermakeup
+  - themichellephan
+  - natashadenona
+  - addisonre
+  - kyliejenner
+  - jamescharles
+  - nikitadragun
+  - glamzilla
+  - glowwithava
+  - xoxoemira
+
+caption_pos:
+  - makeup
+  - skincare
+  - skin care
+  - beauty
+  - grwm
+  - cosmetic
+  - foundation
+  - concealer
+  - mascara
+  - eyeshadow
+  - eyeliner
+  - blush
+  - contour
+  - "lip\\s?(combo|liner|oil|stick|gloss)"
+  - brows
+  - lashes
+  - glam
+  - sephora
+  - ulta
+  - dupe
+  - swatch
+  - retinol
+  - spf
+  - moisturizer
+  - serum
+  - cleanser
+  - toner
+  - glass skin
+  - glowy
+  - "mua\\b"
+  - "\U0001F484"   # 💄
+  - "\U0001F9F4"   # 🧴
+caption_neg:
+  - "\\bskit\\b"
+  - prank
+  - standup
+  - comedy club
+  - dogsoftiktok
+  - catsoftiktok
+  - "#dog\\b"
+  - "#puppy"
+  - "#kitten"
+  - recipe
+  - cooking
+  - foodtok
+  - booktok
+  - book rec
+  - workout
+  - gym
+  - fitness
+  - protein
+  - outfit
+  - ootd
+  - fashion haul
+  - hairstyle
+  - haircut
+  - hair tutorial
+  - haircare
+  - nail art
+  - nail tech
+  - crypto
+  - realtor
+  - football
+  - basketball
+  - gaming
+handle_pos:
+  - makeup
+  - beauty
+  - skincare
+  - mua
+  - glam
+  - cosmetic
+  - skin
+handle_neg:
+  - comedy
+  - funny
+  - skit
+  - kitchen
+  - recipe
+  - fitness
+  - gym
+  - nails
+  - nailart
+  - hairby
+  - hairstylist
+  - hairsalon
+  - barber
+  - kitten
+  - puppy
+  - realtor
+  - crypto
+  - gaming
+  - booktok
+handle_neg_patterns: []
+blacklist: []
+
+ugc_follower_cap: 500000
+pet_filter: true
+ad_filter: true           # 实战教训：美妆带货密度高(cici 反馈硬广)，v2 起默认开
+strict_zero_pos: true     # 美妆 caption 带品类词比例高，零正信号多条可放心踢
